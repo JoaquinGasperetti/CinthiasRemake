@@ -1,19 +1,34 @@
 package com.hkemtrentainment.cinthiasquestr.ui.gameboard.components
 
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material3.*
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.tooling.preview.Preview
 import com.hkemtrentainment.cinthiasquestr.ui.theme.CinthiasQuestTheme
 
 @Composable
@@ -21,7 +36,7 @@ fun OutOfMovesDialog(
     onWatchAdClick: () -> Unit,
     onQuitClick: () -> Unit
 ) {
-    Dialog(onDismissRequest = { /* Don't dismiss by clicking outside */ }) {
+    Dialog(onDismissRequest = { /* No cerrar tocando fuera */ }) {
         Card(
             modifier = Modifier
                 .fillMaxWidth()
@@ -41,7 +56,7 @@ fun OutOfMovesDialog(
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 Text(
-                    text = "Out of Moves!",
+                    text = "¡Sin Movimientos!",
                     style = MaterialTheme.typography.headlineMedium,
                     fontWeight = FontWeight.Bold,
                     color = Color(0xFF3E2723),
@@ -49,7 +64,7 @@ fun OutOfMovesDialog(
                 )
 
                 Text(
-                    text = "You've run out of moves! Don't give up now. Watch a short video to get 5 extra moves and keep your quest going!",
+                    text = "¡Te quedaste sin movimientos! No te rindas ahora: mira un video corto para obtener +5 movimientos extra y continuar tu misión.",
                     style = MaterialTheme.typography.bodyLarge,
                     color = Color(0xFF3E2723),
                     textAlign = TextAlign.Center
@@ -58,10 +73,7 @@ fun OutOfMovesDialog(
                 Spacer(modifier = Modifier.height(8.dp))
 
                 Button(
-                    onClick = {
-                        // TODO: Trigger AdMob Rewarded Ad
-                        onWatchAdClick()
-                    },
+                    onClick = onWatchAdClick,
                     modifier = Modifier.fillMaxWidth(),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = Color(0xFF3E2723),
@@ -75,7 +87,7 @@ fun OutOfMovesDialog(
                         modifier = Modifier.size(24.dp)
                     )
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text(text = "Watch Ad for +5 Moves")
+                    Text(text = "Ver Anuncio (+5 Movimientos)")
                 }
 
                 TextButton(
@@ -83,7 +95,7 @@ fun OutOfMovesDialog(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(
-                        text = "Quit",
+                        text = "Salir al Mapa de Mundos",
                         style = MaterialTheme.typography.labelLarge,
                         color = Color(0xFF3E2723).copy(alpha = 0.7f)
                     )

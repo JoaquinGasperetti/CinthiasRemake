@@ -1,11 +1,21 @@
 package com.hkemtrentainment.cinthiasquestr.ui.gameboard.components
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Pause
-import androidx.compose.material3.*
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -13,7 +23,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.hkemtrentainment.cinthiasquestr.ui.theme.CinthiasQuestTheme
 
 @Composable
 fun GameTopBar(
@@ -38,27 +47,29 @@ fun GameTopBar(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Level & Target Score Info
             Column {
                 Text(
-                    text = "LEVEL $level",
+                    text = "NIVEL $level",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     color = Color(0xFFF5E6CE)
                 )
                 Text(
-                    text = "Target: $targetScore",
+                    text = "Objetivo: $targetScore",
                     style = MaterialTheme.typography.bodySmall,
                     color = Color(0xFFFFD700)
                 )
+                Text(
+                    text = "🪙 $coins",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color(0xFFFFE082)
+                )
             }
 
-            // Score & Moves Display
             Row(
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Score Box
                 Box(
                     modifier = Modifier
                         .background(Color(0xFF2C1A14), shape = RoundedCornerShape(8.dp))
@@ -67,7 +78,7 @@ fun GameTopBar(
                 ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(
-                            text = "SCORE",
+                            text = "PUNTOS",
                             fontSize = 10.sp,
                             color = Color(0xFFD7CCC8),
                             fontWeight = FontWeight.Bold
@@ -81,7 +92,6 @@ fun GameTopBar(
                     }
                 }
 
-                // Moves Box
                 Box(
                     modifier = Modifier
                         .background(Color(0xFF2C1A14), shape = RoundedCornerShape(8.dp))
@@ -90,7 +100,7 @@ fun GameTopBar(
                 ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(
-                            text = "MOVES",
+                            text = "MOVS",
                             fontSize = 10.sp,
                             color = Color(0xFFD7CCC8),
                             fontWeight = FontWeight.Bold
@@ -105,11 +115,10 @@ fun GameTopBar(
                 }
             }
 
-            // Pause Button
             IconButton(onClick = onPauseClick) {
                 Icon(
                     imageVector = Icons.Default.Pause,
-                    contentDescription = "Pause",
+                    contentDescription = "Pausar",
                     tint = Color(0xFFF5E6CE)
                 )
             }

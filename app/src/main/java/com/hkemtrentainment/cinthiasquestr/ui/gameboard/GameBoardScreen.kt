@@ -1,50 +1,90 @@
 package com.hkemtrentainment.cinthiasquestr.ui.gameboard
 
-import androidx.compose.animation.*
-import androidx.compose.animation.core.*
-import androidx.compose.foundation.Canvas
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.VectorConverter
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.animateIntOffsetAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material.icons.filled.Build
+import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.Face
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.SentimentVeryDissatisfied
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.zIndex
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.hkemtrentainment.cinthiasquestr.CinthiasQuestApp
+import com.hkemtrentainment.cinthiasquestr.data.WorldRepository
 import com.hkemtrentainment.cinthiasquestr.ui.gameboard.components.GameTopBar
 import com.hkemtrentainment.cinthiasquestr.ui.gameboard.components.OutOfMovesDialog
 import com.hkemtrentainment.cinthiasquestr.ui.gameboard.components.PauseDialog
 import com.hkemtrentainment.cinthiasquestr.ui.gameboard.components.VictoryDialog
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalHapticFeedback
-import androidx.compose.ui.tooling.preview.Preview
-import androidx.lifecycle.viewmodel.compose.viewModel
-import com.hkemtrentainment.cinthiasquestr.CinthiasQuestApp
-import com.hkemtrentainment.cinthiasquestr.ui.theme.CinthiasQuestTheme
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
@@ -67,7 +107,7 @@ fun GameBoardScreen(
 ) {
     val gameState by viewModel.gameState.collectAsState()
     var showPauseDialog by remember { mutableStateOf(false) }
-    
+
     val haptic = LocalHapticFeedback.current
     val shakeOffset = remember { Animatable(Offset.Zero, Offset.VectorConverter) }
     val coroutineScope = rememberCoroutineScope()
@@ -82,7 +122,6 @@ fun GameBoardScreen(
                     haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                 }
                 is GameEffect.ComboHaptic -> {
-                    // Staggered pattern for chain combos
                     repeat(3) {
                         haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                         delay(50)
@@ -139,24 +178,68 @@ fun GameBoardScreen(
                 .background(
                     Brush.verticalGradient(
                         colors = listOf(
-                            Color(0xFF3E2723), // Medieval Dark Brown
-                            Color(0xFF1A1A1A)  // Deep Shadow
+                            Color(0xFF3E2723),
+                            Color(0xFF1A1A1A)
                         )
                     )
                 )
         ) {
-            val boardPadding = 48.dp // Increased padding for future frame
+            val boardPadding = 24.dp
             val maxBoardWidth = maxWidth - boardPadding * 2
-            val maxBoardHeight = maxHeight * 0.65f // Slightly more room for character
+            val maxBoardHeight = maxHeight * 0.65f
             val boardSize = minOf(maxBoardWidth, maxBoardHeight)
-            val cellSize = (boardSize - 24.dp) / 8 // Adjusted for border/padding
+            val cellSize = (boardSize - 24.dp) / 8
             val cellSizePx = with(LocalDensity.current) { cellSize.toPx() }
+            val isSelectingBoosterTarget = gameState.boardState == BoardState.WAITING_FOR_BOOSTER_TARGET
+
+            // Capa de oscurecimiento DETRÁS del tablero (zIndex = 1f) para resaltar las fichas
+            if (isSelectingBoosterTarget) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .zIndex(1f)
+                        .background(Color.Black.copy(alpha = 0.65f))
+                        .clickable { viewModel.cancelActiveBooster() }
+                ) {
+                    Surface(
+                        color = Color(0xFF3E2723),
+                        shape = RoundedCornerShape(16.dp),
+                        modifier = Modifier
+                            .align(Alignment.TopCenter)
+                            .padding(top = 20.dp, start = 16.dp, end = 16.dp)
+                            .border(2.dp, Color(0xFFFFD700), RoundedCornerShape(16.dp))
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(
+                                text = "TOCA UNA FICHA PARA USAR ${gameState.activeBooster?.displayName?.uppercase() ?: ""}",
+                                style = MaterialTheme.typography.titleSmall,
+                                color = Color(0xFFFFD700),
+                                fontWeight = FontWeight.ExtraBold
+                            )
+                            TextButton(onClick = { viewModel.cancelActiveBooster() }) {
+                                Text(
+                                    text = "Cancelar",
+                                    color = Color(0xFFF5E6CE),
+                                    fontSize = 12.sp
+                                )
+                            }
+                        }
+                    }
+                }
+            }
 
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier.fillMaxSize()
+                modifier = Modifier
+                    .fillMaxSize()
+                    .zIndex(2f)
             ) {
-                // 1. Character Area
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // 1. Personaje Cinthia
                 CinthiaCharacter(state = gameState.cinthiaState)
 
                 Spacer(modifier = Modifier.weight(1f))
@@ -177,7 +260,7 @@ fun GameBoardScreen(
                     label = "dragY"
                 )
 
-                // 2. Game Grid Container
+                // 2. Contenedor del Tablero 8x8 (iluminado si hay un booster activo)
                 Box(
                     modifier = Modifier
                         .size(boardSize)
@@ -186,14 +269,17 @@ fun GameBoardScreen(
                             translationY = shakeOffset.value.y
                         }
                         .background(Color(0xFF2C1B18), shape = RoundedCornerShape(16.dp))
-                        .border(4.dp, Color(0xFF8D6E63), shape = RoundedCornerShape(16.dp))
+                        .border(
+                            width = if (isSelectingBoosterTarget) 4.dp else 4.dp,
+                            color = if (isSelectingBoosterTarget) Color(0xFFFFD700) else Color(0xFF8D6E63),
+                            shape = RoundedCornerShape(16.dp)
+                        )
                         .padding(12.dp)
                 ) {
-                    // Render 8x8 Grid
                     for (r in 0 until 8) {
                         for (c in 0 until 8) {
                             val piece = gameState.grid.getOrNull(r)?.getOrNull(c)
-                            if (piece != null) {
+                            if (piece != null && !piece.isEmpty) {
                                 val isMatched = gameState.matchParticles.contains(r to c)
                                 key(piece.id) {
                                     val targetOffset = IntOffset(
@@ -258,12 +344,13 @@ fun GameBoardScreen(
                                         modifier = Modifier
                                             .offset { renderOffset }
                                             .size(cellSize)
-                                            .pointerInput(Unit) {
+                                            .pointerInput(r, c, isSelectingBoosterTarget) {
                                                 detectTapGestures {
                                                     viewModel.onPieceTapped(r, c)
                                                 }
                                             }
-                                            .pointerInput(r, c) {
+                                            .pointerInput(r, c, isSelectingBoosterTarget) {
+                                                if (isSelectingBoosterTarget) return@pointerInput
                                                 detectDragGestures(
                                                     onDragStart = {
                                                         activeDragCell = r to c
@@ -339,35 +426,17 @@ fun GameBoardScreen(
 
                 Spacer(modifier = Modifier.weight(1f))
             }
-
-            // 3. Dimming Layer (Only visible when selecting booster target)
-            if (gameState.boardState == BoardState.WAITING_FOR_BOOSTER_TARGET) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(Color.Black.copy(alpha = 0.6f))
-                ) {
-                    Text(
-                        "SELECT TARGET",
-                        style = MaterialTheme.typography.headlineSmall,
-                        color = Color.White,
-                        fontWeight = FontWeight.Black,
-                        modifier = Modifier
-                            .align(Alignment.TopCenter)
-                            .padding(top = 40.dp)
-                    )
-                }
-            }
         }
 
         if (gameState.isGameWon) {
             VictoryDialog(
                 score = gameState.score,
                 stars = gameState.earnedStars,
-                onWatchAdClick = {
-                    // TODO: Implement double coins reward
-                },
-                onNextLevelClick = { onNextLevelClick(selectedLevel + 1) },
+                earnedCoins = gameState.earnedCoinsReward,
+                doubleCoinsClaimed = gameState.doubleCoinsClaimed,
+                hasNextLevel = gameState.level < WorldRepository.MAX_GAME_LEVELS,
+                onWatchAdClick = { viewModel.claimDoubleCoinsReward() },
+                onNextLevelClick = { onNextLevelClick(gameState.level + 1) },
                 onWorldMapClick = onWorldMapClick
             )
         } else if (gameState.isGameOver) {
@@ -406,7 +475,6 @@ fun CinthiaCharacter(state: CinthiaState) {
             scaleY = scale
         }
     ) {
-        // Character Image Placeholder - Ready for PNG
         Image(
             painter = rememberVectorPainter(
                 image = when (state) {
@@ -419,7 +487,7 @@ fun CinthiaCharacter(state: CinthiaState) {
             contentDescription = "Cinthia",
             contentScale = ContentScale.Fit,
             modifier = Modifier
-                .size(120.dp)
+                .size(110.dp)
                 .shadow(12.dp, CircleShape)
                 .background(Color(0xFF8D6E63), CircleShape)
                 .padding(16.dp),
@@ -470,7 +538,7 @@ fun BoosterItem(
     type: BoosterType,
     count: Int,
     isActive: Boolean,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    icon: ImageVector,
     onClick: () -> Unit
 ) {
     val scale by animateFloatAsState(if (isActive) 1.15f else 1.0f, label = "boosterScale")
@@ -494,12 +562,11 @@ fun BoosterItem(
     ) {
         Icon(
             imageVector = icon,
-            contentDescription = type.name,
+            contentDescription = type.displayName,
             tint = if (isActive) Color(0xFF3E2723) else Color(0xFFF5E6CE),
             modifier = Modifier.size(28.dp)
         )
 
-        // Count Badge
         Box(
             modifier = Modifier
                 .align(Alignment.TopEnd)
@@ -528,7 +595,7 @@ fun AdMobPlaceholder() {
         contentAlignment = Alignment.Center
     ) {
         Text(
-            text = "AdMob Banner Placeholder",
+            text = "Espacio Publicitario (AdMob)",
             color = Color(0xFF8D6E63),
             fontSize = 12.sp,
             fontWeight = FontWeight.Medium

@@ -45,7 +45,7 @@ object WorldRepository {
         WorldConfig(
             id = 3,
             name = "Cueva de Cristal",
-            description = "Cavernas subterráneas heladas ilumnadas por cristales cósmicos.",
+            description = "Cavernas subterráneas heladas iluminadas por cristales cósmicos.",
             primaryColor = Color(0xFF0277BD),
             secondaryColor = Color(0xFF4FC3F7),
             gradientColors = listOf(Color(0xFF01579B), Color(0xFF0277BD), Color(0xFF0288D1)),
@@ -75,17 +75,18 @@ object WorldRepository {
     )
 
     fun getWorldForLevel(level: Int): WorldConfig {
-        return WORLDS.find { level in it.startLevel..it.endLevel }
+        val safeLevel = level.coerceIn(1, MAX_GAME_LEVELS)
+        return WORLDS.find { safeLevel in it.startLevel..it.endLevel }
             ?: WORLDS.last()
     }
 
     fun getLevelConfig(level: Int): LevelConfig {
-        val world = getWorldForLevel(level)
-        val levelIndexInWorld = (level - 1) % 5
-        val baseTarget = 1200 + (level * 400)
-        val baseMoves = maxOf(12, 25 - (level / 2))
+        val safeLevel = level.coerceIn(1, MAX_GAME_LEVELS)
+        val world = getWorldForLevel(safeLevel)
+        val baseTarget = 1200 + (safeLevel * 400)
+        val baseMoves = maxOf(12, 25 - (safeLevel / 2))
         return LevelConfig(
-            levelNumber = level,
+            levelNumber = safeLevel,
             worldId = world.id,
             targetScore = baseTarget,
             moves = baseMoves

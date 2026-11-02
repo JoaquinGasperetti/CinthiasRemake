@@ -7,6 +7,7 @@ import com.google.firebase.firestore.SetOptions
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 
@@ -35,7 +36,6 @@ object CloudSaveManager {
     fun startSync(repository: PlayerRepository, scope: CoroutineScope) {
         scope.launch(Dispatchers.IO) {
             try {
-                // Ensure user is signed in anonymously
                 val currentAuth = auth ?: return@launch
                 var currentUser = currentAuth.currentUser
                 if (currentUser == null) {
@@ -46,13 +46,19 @@ object CloudSaveManager {
                 val uid = currentUser?.uid ?: return@launch
                 Log.d(TAG, "Authenticated anonymously with UID: $uid")
 
-                // First, check cloud save for progress restore
+                // 1. Restaurar y fusionar datos de la nube de forma idempotente (sin duplicar monedas)
                 restoreFromCloudIfNewer(uid, repository)
 
-                // Listen for local changes and push to cloud
-                repository.playerDataFlow.collectLatest { playerData ->
-                    saveToCloudInternal(uid, playerData)
-                }
+                // 2. Escuchar cambios locales posteriores y sincronizarlos con Firestore
+                var lastSynced: PlayerData? = null
+                repository.playerDataFlow
+                    .distinctUntilChanged()
+                    .collectLatest { playerData ->
+                        if (playerData != lastSynced) {
+                            lastSynced = playerData
+                            saveToCloudInternal(uid, playerData)
+                        }
+                    }
             } catch (e: Exception) {
                 Log.e(TAG, "Error during cloud save sync: ${e.message}")
             }
@@ -79,14 +85,14 @@ object CloudSaveManager {
 
                 Log.d(TAG, "Fetched cloud save: level=$cloudLevel, coins=$cloudCoins, stars=$cloudStars")
 
-                // Restore level stars & max level if higher in cloud
-                for ((lvl, stars) in cloudStars) {
-                    repository.completeLevelAndUnlockNext(completedLevel = lvl, starsEarned = stars)
-                }
-
-                if (cloudCoins > 0) {
-                    repository.addCoins(cloudCoins)
-                }
+                repository.syncFromCloud(
+                    cloudCoins = cloudCoins,
+                    cloudLevel = cloudLevel,
+                    cloudHammer = cloudHammer,
+                    cloudDynamite = cloudDynamite,
+                    cloudShuffle = cloudShuffle,
+                    cloudStars = cloudStars
+                )
             } else {
                 Log.d(TAG, "No cloud save document found yet for UID: $uid")
             }
