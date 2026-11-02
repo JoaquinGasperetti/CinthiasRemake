@@ -1,6 +1,6 @@
-package com.hkentertainment.cinthiasquestr.ui.gameboard.components
+package com.hkemtrentainment.cinthiasquestr.ui.gameboard.components
 
-import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -10,11 +10,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.tooling.preview.Preview
-import com.hkentertainment.cinthiasquestr.ui.theme.CinthiasQuestTheme
+import androidx.compose.ui.unit.sp
+import com.hkemtrentainment.cinthiasquestr.ui.theme.CinthiasQuestTheme
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun GameTopBar(
     score: Int,
@@ -24,68 +24,95 @@ fun GameTopBar(
     coins: Int,
     onPauseClick: () -> Unit
 ) {
-    TopAppBar(
-        colors = TopAppBarDefaults.topAppBarColors(
-            containerColor = Color.Transparent,
-            titleContentColor = Color.White,
-            actionIconContentColor = Color.White
-        ),
-        title = {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .statusBarsPadding(),
+        color = Color(0xFF3E2723),
+        shadowElevation = 4.dp
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Level & Target Score Info
+            Column {
+                Text(
+                    text = "LEVEL $level",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFFF5E6CE)
+                )
+                Text(
+                    text = "Target: $targetScore",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color(0xFFFFD700)
+                )
+            }
+
+            // Score & Moves Display
             Row(
-                modifier = Modifier.fillMaxWidth().padding(end = 8.dp),
-                horizontalArrangement = Arrangement.SpaceEvenly,
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                HUDItem(label = "Level", value = level.toString())
-                HUDItem(label = "Score", value = "$score / $targetScore")
-                HUDItem(label = "Moves", value = movesLeft.toString())
-                HUDItem(label = "Coins", value = coins.toString())
+                // Score Box
+                Box(
+                    modifier = Modifier
+                        .background(Color(0xFF2C1A14), shape = RoundedCornerShape(8.dp))
+                        .padding(horizontal = 12.dp, vertical = 6.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            text = "SCORE",
+                            fontSize = 10.sp,
+                            color = Color(0xFFD7CCC8),
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = "$score",
+                            fontSize = 16.sp,
+                            color = Color.White,
+                            fontWeight = FontWeight.ExtraBold
+                        )
+                    }
+                }
+
+                // Moves Box
+                Box(
+                    modifier = Modifier
+                        .background(Color(0xFF2C1A14), shape = RoundedCornerShape(8.dp))
+                        .padding(horizontal = 12.dp, vertical = 6.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            text = "MOVES",
+                            fontSize = 10.sp,
+                            color = Color(0xFFD7CCC8),
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = "$movesLeft",
+                            fontSize = 16.sp,
+                            color = if (movesLeft <= 5) Color(0xFFFF5252) else Color(0xFFFFD700),
+                            fontWeight = FontWeight.ExtraBold
+                        )
+                    }
+                }
             }
-        },
-        actions = {
-            IconButton(
-                onClick = onPauseClick,
-                modifier = Modifier.size(48.dp)
-            ) {
+
+            // Pause Button
+            IconButton(onClick = onPauseClick) {
                 Icon(
                     imageVector = Icons.Default.Pause,
                     contentDescription = "Pause",
-                    tint = Color(0xFF8D6E63)
+                    tint = Color(0xFFF5E6CE)
                 )
             }
         }
-    )
-}
-
-@Composable
-fun HUDItem(label: String, value: String) {
-    Card(
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF3E2723)),
-        border = BorderStroke(2.dp, Color(0xFF8D6E63)),
-        shape = RoundedCornerShape(8.dp),
-    ) {
-        Column(
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Text(
-                text = label,
-                style = MaterialTheme.typography.labelSmall,
-                color = Color(0xFF8D6E63)
-            )
-            Text(
-                text = value,
-                style = MaterialTheme.typography.titleMedium,
-                color = Color.White
-            )
-        }
-    }
-}
-
-@Preview(showBackground = true)
-@Composable
-fun GameTopBarPreview() {
-    CinthiasQuestTheme {
-        GameTopBar(score = 120, targetScore = 2000, movesLeft = 15, level = 1, coins = 100, onPauseClick = {})
     }
 }

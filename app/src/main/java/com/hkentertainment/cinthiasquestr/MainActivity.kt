@@ -1,4 +1,4 @@
-package com.hkentertainment.cinthiasquestr
+package com.hkemtrentainment.cinthiasquestr
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -8,13 +8,14 @@ import androidx.compose.runtime.remember
 import androidx.navigation3.runtime.NavKey
 import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.ui.NavDisplay
-import com.hkentertainment.cinthiasquestr.navigation.Navigator
-import com.hkentertainment.cinthiasquestr.navigation.Screen
-import com.hkentertainment.cinthiasquestr.navigation.rememberNavigationState
-import com.hkentertainment.cinthiasquestr.navigation.toEntries
-import com.hkentertainment.cinthiasquestr.ui.gameboard.GameBoardScreen
-import com.hkentertainment.cinthiasquestr.ui.mainmenu.MainMenuScreen
-import com.hkentertainment.cinthiasquestr.ui.theme.CinthiasQuestTheme
+import com.hkemtrentainment.cinthiasquestr.navigation.Navigator
+import com.hkemtrentainment.cinthiasquestr.navigation.Screen
+import com.hkemtrentainment.cinthiasquestr.navigation.rememberNavigationState
+import com.hkemtrentainment.cinthiasquestr.navigation.toEntries
+import com.hkemtrentainment.cinthiasquestr.ui.gameboard.GameBoardScreen
+import com.hkemtrentainment.cinthiasquestr.ui.mainmenu.MainMenuScreen
+import com.hkemtrentainment.cinthiasquestr.ui.theme.CinthiasQuestTheme
+import com.hkemtrentainment.cinthiasquestr.ui.worldmap.WorldMapScreen
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -30,12 +31,28 @@ class MainActivity : ComponentActivity() {
             val entryProvider = entryProvider<NavKey> {
                 entry<Screen.MainMenu> {
                     MainMenuScreen(
-                        onPlayClick = { navigator.navigate(Screen.GameBoard) }
+                        onPlayClick = { navigator.navigate(Screen.WorldMap) }
                     )
                 }
-                entry<Screen.GameBoard> {
+                entry<Screen.WorldMap> {
+                    WorldMapScreen(
+                        onBackClick = { navigator.goBack() },
+                        onLevelSelect = { levelNumber ->
+                            navigator.navigate(Screen.GameBoard(level = levelNumber))
+                        }
+                    )
+                }
+                entry<Screen.GameBoard> { key ->
                     GameBoardScreen(
-                        onPauseClick = { navigator.goBack() }
+                        selectedLevel = key.level,
+                        onPauseClick = { navigator.goBack() },
+                        onNextLevelClick = { nextLevel ->
+                            navigator.goBack()
+                            navigator.navigate(Screen.GameBoard(level = nextLevel))
+                        },
+                        onWorldMapClick = {
+                            navigator.goBack()
+                        }
                     )
                 }
             }

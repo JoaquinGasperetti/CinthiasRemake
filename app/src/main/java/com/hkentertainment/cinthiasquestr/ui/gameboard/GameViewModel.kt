@@ -1,13 +1,13 @@
-package com.hkentertainment.cinthiasquestr.ui.gameboard
+package com.hkemtrentainment.cinthiasquestr.ui.gameboard
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
-import com.hkentertainment.cinthiasquestr.data.PlayerRepository
+import com.hkemtrentainment.cinthiasquestr.data.PlayerRepository
+import com.hkemtrentainment.cinthiasquestr.data.WorldRepository
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
-import kotlin.math.abs
 
 enum class BoardState {
     IDLE, SWAPPING, RESOLVING, DROPPING, SHUFFLING, WAITING_FOR_BOOSTER_TARGET
@@ -27,7 +27,8 @@ data class GameUIState(
     val boosterInventory: Map<BoosterType, Int> = emptyMap(),
     val activeBooster: BoosterType? = null,
     val coins: Int = 0,
-    val level: Int = 1
+    val level: Int = 1,
+    val earnedStars: Int = 0
 )
 
 sealed class GameEffect {
@@ -41,7 +42,10 @@ enum class SwipeDirection {
     UP, DOWN, LEFT, RIGHT
 }
 
-class GameViewModel(private val playerRepository: PlayerRepository) : ViewModel() {
+class GameViewModel(
+    private val playerRepository: PlayerRepository,
+    val selectedLevel: Int = 1
+) : ViewModel() {
     private val _uiState = MutableStateFlow(GameUIState())
     val uiState: StateFlow<GameUIState> = _uiState.asStateFlow()
 
@@ -54,6 +58,15 @@ class GameViewModel(private val playerRepository: PlayerRepository) : ViewModel(
     private val logicalGrid = MutableList(8) { MutableList(8) { GamePiece(type = randomType()) } }
 
     init {
+        val levelConfig = WorldRepository.getLevelConfig(selectedLevel)
+        _uiState.update {
+            it.copy(
+                level = selectedLevel,
+                targetScore = levelConfig.targetScore,
+                movesLeft = levelConfig.moves
+            )
+        }
+
         viewModelScope.launch {
             playerRepository.playerDataFlow.collect { playerData ->
                 _uiState.update { it.copy(
@@ -62,8 +75,7 @@ class GameViewModel(private val playerRepository: PlayerRepository) : ViewModel(
                         BoosterType.DYNAMITE to playerData.dynamite,
                         BoosterType.SHUFFLE to playerData.shuffle
                     ),
-                    coins = playerData.coins,
-                    level = playerData.level
+                    coins = playerData.coins
                 ) }
             }
         }
@@ -226,7 +238,7 @@ class GameViewModel(private val playerRepository: PlayerRepository) : ViewModel(
             val points = finalDestructionSet.size * 10 * combo
             _uiState.update { it.copy(score = it.score + points, matchParticles = finalDestructionSet) }
             
-            // Reward coins for matches (e.g., 1 coin for every 100 points)
+            // Reward coins for matches
             if (points >= 100) {
                 viewModelScope.launch {
                     playerRepository.addCoins(points / 100)
@@ -236,19 +248,17 @@ class GameViewModel(private val playerRepository: PlayerRepository) : ViewModel(
             delay(200) // Destruction anim
             _uiState.update { it.copy(matchParticles = emptySet()) }
 
-            // Apply logical removal (except where power-ups spawn)
+            // Apply logical removal
             val powerUpPositions = powerUpsToSpawn.map { it.first to it.second }.toSet()
             for (coord in finalDestructionSet) {
                 if (coord !in powerUpPositions) {
-                    // Use a unique ID with an EMPTY prefix to avoid key collisions in Compose
-                    // while still allowing the logic to identify pieces to be removed.
                     logicalGrid[coord.first][coord.second] = GamePiece(
                         type = GamePieceType.entries.random(),
                         id = "EMPTY_${java.util.UUID.randomUUID()}"
                     )
                 }
             }
-            
+
             // Place power-ups
             for (p in powerUpsToSpawn) {
                 val basePiece = logicalGrid[p.first][p.second]
@@ -407,7 +417,6 @@ class GameViewModel(private val playerRepository: PlayerRepository) : ViewModel(
                     logicalGrid[r][c] = pieces.removeAt(0)
                 }
             }
-            // Ensure no starting matches after shuffle
         } while (findMatches().isNotEmpty() || !hasPossibleMoves())
         
         syncUI()
@@ -415,17 +424,27 @@ class GameViewModel(private val playerRepository: PlayerRepository) : ViewModel(
 
     private fun checkGameOver() {
         val currentState = _uiState.value
-        if (currentState.score >= currentState.targetScore) {
-            viewModelScope.launch {
-                playerRepository.levelUp()
-                playerRepository.addCoins(50)
+        if (currentState.score >= currentState.targetScore && !currentState.isGameWon) {
+            val target = currentState.targetScore
+            val score = currentState.score
+            val stars = when {
+                score >= (target * 1.8).toInt() -> 3
+                score >= (target * 1.4).toInt() -> 2
+                else -> 1
             }
+
+            viewModelScope.launch {
+                playerRepository.completeLevelAndUnlockNext(selectedLevel, stars)
+                playerRepository.addCoins(50 + stars * 25)
+            }
+
             _uiState.update {
                 it.copy(
                     isGameWon = true,
                     isGameOver = true,
                     boardState = BoardState.IDLE,
-                    cinthiaState = CinthiaState.CHEERING
+                    cinthiaState = CinthiaState.CHEERING,
+                    earnedStars = stars
                 )
             }
         } else if (currentState.movesLeft <= 0) {
@@ -549,11 +568,14 @@ class GameViewModel(private val playerRepository: PlayerRepository) : ViewModel(
         }
     }
 
-    class Factory(private val playerRepository: PlayerRepository) : ViewModelProvider.Factory {
+    class Factory(
+        private val playerRepository: PlayerRepository,
+        private val selectedLevel: Int = 1
+    ) : ViewModelProvider.Factory {
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
             if (modelClass.isAssignableFrom(GameViewModel::class.java)) {
                 @Suppress("UNCHECKED_CAST")
-                return GameViewModel(playerRepository) as T
+                return GameViewModel(playerRepository, selectedLevel) as T
             }
             throw IllegalArgumentException("Unknown ViewModel class")
         }

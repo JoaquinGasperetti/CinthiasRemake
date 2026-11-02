@@ -1,11 +1,11 @@
 // Dependency Remark: implementation("androidx.datastore:datastore-preferences:1.0.0")
-package com.hkentertainment.cinthiasquestr.data
+package com.hkemtrentainment.cinthiasquestr.data
 
 import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.*
 import androidx.datastore.preferences.preferencesDataStore
-import com.hkentertainment.cinthiasquestr.ui.gameboard.BoosterType
+import com.hkemtrentainment.cinthiasquestr.ui.gameboard.BoosterType
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.map
@@ -21,6 +21,7 @@ class PlayerRepository(private val dataStore: DataStore<Preferences>) {
         val HAMMER = intPreferencesKey("hammer")
         val DYNAMITE = intPreferencesKey("dynamite")
         val SHUFFLE = intPreferencesKey("shuffle")
+        val LEVEL_STARS = stringPreferencesKey("level_stars")
     }
 
     val playerDataFlow: Flow<PlayerData> = dataStore.data
@@ -37,7 +38,8 @@ class PlayerRepository(private val dataStore: DataStore<Preferences>) {
                 level = preferences[PreferencesKeys.LEVEL] ?: 1,
                 hammer = preferences[PreferencesKeys.HAMMER] ?: 1,
                 dynamite = preferences[PreferencesKeys.DYNAMITE] ?: 1,
-                shuffle = preferences[PreferencesKeys.SHUFFLE] ?: 1
+                shuffle = preferences[PreferencesKeys.SHUFFLE] ?: 1,
+                levelStars = parseStars(preferences[PreferencesKeys.LEVEL_STARS])
             )
         }
 
@@ -72,5 +74,38 @@ class PlayerRepository(private val dataStore: DataStore<Preferences>) {
             val current = preferences[PreferencesKeys.LEVEL] ?: 1
             preferences[PreferencesKeys.LEVEL] = current + 1
         }
+    }
+
+    suspend fun completeLevelAndUnlockNext(completedLevel: Int, starsEarned: Int) {
+        dataStore.edit { preferences ->
+            val currentMaxLevel = preferences[PreferencesKeys.LEVEL] ?: 1
+            if (completedLevel >= currentMaxLevel) {
+                preferences[PreferencesKeys.LEVEL] = completedLevel + 1
+            }
+
+            val currentStarsMap = parseStars(preferences[PreferencesKeys.LEVEL_STARS]).toMutableMap()
+            val existingStars = currentStarsMap[completedLevel] ?: 0
+            if (starsEarned > existingStars) {
+                currentStarsMap[completedLevel] = starsEarned
+                preferences[PreferencesKeys.LEVEL_STARS] = formatStars(currentStarsMap)
+            }
+        }
+    }
+
+    private fun parseStars(starsStr: String?): Map<Int, Int> {
+        if (starsStr.isNullOrEmpty()) return emptyMap()
+        return starsStr.split(",")
+            .mapNotNull { entry ->
+                val parts = entry.split(":")
+                if (parts.size == 2) {
+                    val lvl = parts[0].toIntOrNull()
+                    val stars = parts[1].toIntOrNull()
+                    if (lvl != null && stars != null) lvl to stars else null
+                } else null
+            }.toMap()
+    }
+
+    private fun formatStars(map: Map<Int, Int>): String {
+        return map.entries.joinToString(",") { "${it.key}:${it.value}" }
     }
 }

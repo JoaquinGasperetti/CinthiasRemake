@@ -1,4 +1,4 @@
-package com.hkentertainment.cinthiasquestr.navigation
+package com.hkemtrentainment.cinthiasquestr.navigation
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.MutableState

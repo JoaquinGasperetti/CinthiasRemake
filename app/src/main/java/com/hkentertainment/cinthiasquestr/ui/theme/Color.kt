@@ -1,9 +1,11 @@
-package com.hkentertainment.cinthiasquestr.ui.theme
+package com.hkemtrentainment.cinthiasquestr.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-val DarkWood = Color(0xFF3E2723)
-val LightWood = Color(0xFF8D6E63)
-val Parchment = Color(0xFFF5E6CE)
-val DeepShadow = Color(0xFF1B1210)
-val MedievalGold = Color(0xFFD4AF37)
+val Purple80 = Color(0xD0E0E0E0)
+val PurpleGrey80 = Color(0xFFCCC2DC)
+val Pink80 = Color(0xFFEFB8C8)
+
+val Purple40 = Color(0xFF6650a4)
+val PurpleGrey40 = Color(0xFF625b71)
+val Pink40 = Color(0xFF7D5260)

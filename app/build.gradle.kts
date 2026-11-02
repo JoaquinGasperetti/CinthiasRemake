@@ -3,14 +3,15 @@ plugins {
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.google.devtools.ksp)
     alias(libs.plugins.jetbrains.kotlin.plugin.serialization)
+    id("com.google.gms.google-services")
 }
 
 android {
-    namespace = "com.hkentertainment.cinthiasquestr"
+    namespace = "com.hkemtrentainment.cinthiasquestr"
     compileSdk = 37
 
     defaultConfig {
-        applicationId = "com.hkentertainment.cinthiasquestr"
+        applicationId = "com.hkemtrentainment.cinthiasquestr"
         minSdk = 24
         targetSdk = 37
         versionCode = 1
@@ -37,6 +38,9 @@ android {
 
 dependencies {
     implementation(platform(libs.androidx.compose.bom))
+    implementation(platform(libs.firebase.bom))
+    implementation(libs.firebase.auth)
+    implementation(libs.firebase.firestore)
     implementation(libs.accompanist.permissions)
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.camera.camera2)

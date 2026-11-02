@@ -1,4 +1,4 @@
-package com.hkentertainment.cinthiasquestr.ui.mainmenu
+package com.hkemtrentainment.cinthiasquestr.ui.mainmenu
 
 import androidx.lifecycle.ViewModel
 

@@ -1,4 +1,4 @@
-package com.hkentertainment.cinthiasquestr.ui.gameboard.components
+package com.hkemtrentainment.cinthiasquestr.ui.gameboard.components
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
@@ -11,7 +11,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.tooling.preview.Preview
-import com.hkentertainment.cinthiasquestr.ui.theme.CinthiasQuestTheme
+import com.hkemtrentainment.cinthiasquestr.ui.theme.CinthiasQuestTheme
 
 @Composable
 fun PauseDialog(

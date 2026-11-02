@@ -1,5 +1,6 @@
-package com.hkentertainment.cinthiasquestr.ui.theme
+package com.hkemtrentainment.cinthiasquestr.ui.theme
 
+import android.app.Activity
 import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
@@ -11,35 +12,22 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.platform.LocalContext
 
 private val DarkColorScheme = darkColorScheme(
-    primary = MedievalGold,
-    onPrimary = DeepShadow,
-    primaryContainer = DarkWood,
-    onPrimaryContainer = Parchment,
-    secondary = LightWood,
-    onSecondary = Parchment,
-    tertiary = Parchment,
-    background = DeepShadow,
-    surface = DarkWood,
-    onSurface = Parchment
+    primary = Purple80,
+    secondary = PurpleGrey80,
+    tertiary = Pink80
 )
 
 private val LightColorScheme = lightColorScheme(
-    primary = DarkWood,
-    onPrimary = Parchment,
-    primaryContainer = Parchment,
-    onPrimaryContainer = DarkWood,
-    secondary = LightWood,
-    onSecondary = Parchment,
-    tertiary = DarkWood,
-    background = Parchment,
-    surface = Parchment,
-    onSurface = DarkWood
+    primary = Purple40,
+    secondary = PurpleGrey40,
+    tertiary = Pink40
 )
 
 @Composable
 fun CinthiasQuestTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
-    dynamicColor: Boolean = false, // Disabled for RPG theme consistency
+    // Dynamic color is available on Android 12+
+    dynamicColor: Boolean = true,
     content: @Composable () -> Unit
 ) {
     val colorScheme = when {
@@ -47,6 +35,7 @@ fun CinthiasQuestTheme(
             val context = LocalContext.current
             if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
         }
+
         darkTheme -> DarkColorScheme
         else -> LightColorScheme
     }

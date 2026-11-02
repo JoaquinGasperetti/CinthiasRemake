@@ -1,4 +1,4 @@
-package com.hkentertainment.cinthiasquestr.ui.mainmenu
+package com.hkemtrentainment.cinthiasquestr.ui.mainmenu
 
 import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
@@ -15,7 +15,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.tooling.preview.Preview
-import com.hkentertainment.cinthiasquestr.ui.theme.CinthiasQuestTheme
+import com.hkemtrentainment.cinthiasquestr.ui.theme.CinthiasQuestTheme
 
 @Composable
 fun MainMenuScreen(

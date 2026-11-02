@@ -1,4 +1,4 @@
-package com.hkentertainment.cinthiasquestr.navigation
+package com.hkemtrentainment.cinthiasquestr.navigation
 
 import androidx.navigation3.runtime.NavKey
 import kotlinx.serialization.Serializable
@@ -9,5 +9,8 @@ sealed class Screen : NavKey {
     data object MainMenu : Screen()
 
     @Serializable
-    data object GameBoard : Screen()
+    data object WorldMap : Screen()
+
+    @Serializable
+    data class GameBoard(val level: Int = 1) : Screen()
 }
