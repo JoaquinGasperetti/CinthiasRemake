@@ -91,6 +91,14 @@ import kotlinx.coroutines.launch
 import kotlin.math.abs
 import kotlin.math.roundToInt
 import kotlin.random.Random
+import androidx.compose.ui.res.painterResource
+import androidx.compose.animation.core.LinearEasing
+import com.hkemtrentainment.cinthiasquestr.R
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.animation.core.animateValue
+import androidx.compose.ui.graphics.ColorMatrix
+import androidx.compose.ui.res.imageResource
+import androidx.compose.ui.graphics.asImageBitmap
 
 @Composable
 fun GameBoardScreen(
@@ -143,106 +151,123 @@ fun GameBoardScreen(
         }
     }
 
-    Scaffold(
-        topBar = {
-            GameTopBar(
-                score = gameState.score,
-                targetScore = gameState.targetScore,
-                movesLeft = gameState.movesLeft,
-                level = gameState.level,
-                coins = gameState.coins,
-                onPauseClick = { showPauseDialog = true }
-            )
-        },
-        bottomBar = {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(MaterialTheme.colorScheme.surface)
-                    .navigationBarsPadding(),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                BoosterBar(
-                    inventory = gameState.boosterInventory,
-                    activeBooster = gameState.activeBooster,
-                    onBoosterClick = { viewModel.onBoosterSelected(it) }
-                )
-                AdMobPlaceholder()
-            }
-        }
-    ) { innerPadding ->
-        BoxWithConstraints(
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        val totalWidth = maxWidth
+        val totalHeight = maxHeight
+        val currentDensity = LocalDensity.current
+        val totalHeightPx = with(currentDensity) { totalHeight.toPx() }
+
+        Image(
+            painter = painterResource(id = R.drawable.bg_game),
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier.fillMaxSize()
+        )
+        
+        val cinthiaSizeDp = totalHeight * 0.22f
+        val maxCinthiaWidth = totalWidth * 0.65f
+        val finalCinthiaSize = minOf(cinthiaSizeDp, maxCinthiaWidth)
+
+        Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(innerPadding)
-                .background(
-                    Brush.verticalGradient(
-                        colors = listOf(
-                            Color(0xFF3E2723),
-                            Color(0xFF1A1A1A)
-                        )
+                .offset { 
+                    IntOffset(
+                        x = 0,
+                        y = (totalHeightPx * 0.333f - with(currentDensity) { finalCinthiaSize.toPx() }).roundToInt()
                     )
-                )
+                },
+            contentAlignment = Alignment.TopCenter
         ) {
-            val boardPadding = 24.dp
-            val maxBoardWidth = maxWidth - boardPadding * 2
-            val maxBoardHeight = maxHeight * 0.65f
-            val boardSize = minOf(maxBoardWidth, maxBoardHeight)
-            val cellSize = (boardSize - 24.dp) / 8
-            val cellSizePx = with(LocalDensity.current) { cellSize.toPx() }
-            val isSelectingBoosterTarget = gameState.boardState == BoardState.WAITING_FOR_BOOSTER_TARGET
+            CinthiaCharacter(state = gameState.cinthiaState, size = finalCinthiaSize)
+        }
 
-            // Capa de oscurecimiento DETRÁS del tablero (zIndex = 1f) para resaltar las fichas
-            if (isSelectingBoosterTarget) {
-                Box(
+        Scaffold(
+            containerColor = Color.Transparent,
+            topBar = {
+                GameTopBar(
+                    score = gameState.score,
+                    targetScore = gameState.targetScore,
+                    movesLeft = gameState.movesLeft,
+                    level = gameState.level,
+                    coins = gameState.coins,
+                    onPauseClick = { showPauseDialog = true }
+                )
+            },
+            bottomBar = {
+                Column(
                     modifier = Modifier
-                        .fillMaxSize()
-                        .zIndex(1f)
-                        .background(Color.Black.copy(alpha = 0.65f))
-                        .clickable { viewModel.cancelActiveBooster() }
+                        .fillMaxWidth()
+                        .background(Color.Transparent)
+                        .navigationBarsPadding(),
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Surface(
-                        color = Color(0xFF3E2723),
-                        shape = RoundedCornerShape(16.dp),
+                    BoosterBar(
+                        inventory = gameState.boosterInventory,
+                        activeBooster = gameState.activeBooster,
+                        onBoosterClick = { viewModel.onBoosterSelected(it) }
+                    )
+                    AdMobPlaceholder()
+                }
+            }
+        ) { innerPadding ->
+            val bottomBarTopHeight = totalHeight - innerPadding.calculateBottomPadding()
+            
+            Box(modifier = Modifier.fillMaxSize()) {
+                val boardPadding = 24.dp
+                val maxBoardWidth = totalWidth - boardPadding * 2
+                val maxBoardHeight = totalHeight * 0.65f
+                var boardSize = minOf(maxBoardWidth, maxBoardHeight)
+                
+                val preferredBoardTop = totalHeight * 0.385f
+                val safeBottomLimit = bottomBarTopHeight - 16.dp
+                if (preferredBoardTop + boardSize > safeBottomLimit) {
+                    boardSize = safeBottomLimit - preferredBoardTop
+                }
+
+                val boardInset = boardSize * 0.03f
+                val cellSize = (boardSize - boardInset * 2f) / 8
+                val cellSizePx = with(LocalDensity.current) { cellSize.toPx() }
+                val isSelectingBoosterTarget = gameState.boardState == BoardState.WAITING_FOR_BOOSTER_TARGET
+
+                // Capa de oscurecimiento DETRÁS del tablero (zIndex = 1f) para resaltar las fichas
+                if (isSelectingBoosterTarget) {
+                    Box(
                         modifier = Modifier
-                            .align(Alignment.TopCenter)
-                            .padding(top = 20.dp, start = 16.dp, end = 16.dp)
-                            .border(2.dp, Color(0xFFFFD700), RoundedCornerShape(16.dp))
+                            .fillMaxSize()
+                            .zIndex(1f)
+                            .background(Color.Black.copy(alpha = 0.65f))
+                            .clickable { viewModel.cancelActiveBooster() }
                     ) {
-                        Column(
-                            modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally
+                        Surface(
+                            color = Color(0xFF3E2723),
+                            shape = RoundedCornerShape(16.dp),
+                            modifier = Modifier
+                                .align(Alignment.TopCenter)
+                                .padding(top = 20.dp, start = 16.dp, end = 16.dp)
+                                .border(2.dp, Color(0xFFFFD700), RoundedCornerShape(16.dp))
                         ) {
-                            Text(
-                                text = "TOCA UNA FICHA PARA USAR ${gameState.activeBooster?.displayName?.uppercase() ?: ""}",
-                                style = MaterialTheme.typography.titleSmall,
-                                color = Color(0xFFFFD700),
-                                fontWeight = FontWeight.ExtraBold
-                            )
-                            TextButton(onClick = { viewModel.cancelActiveBooster() }) {
+                            Column(
+                                modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
                                 Text(
-                                    text = "Cancelar",
-                                    color = Color(0xFFF5E6CE),
-                                    fontSize = 12.sp
+                                    text = "TOCA UNA FICHA PARA USAR ${gameState.activeBooster?.displayName?.uppercase() ?: ""}",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    color = Color(0xFFFFD700),
+                                    fontWeight = FontWeight.ExtraBold
                                 )
+                                TextButton(onClick = { viewModel.cancelActiveBooster() }) {
+                                    Text(
+                                        text = "Cancelar",
+                                        color = Color(0xFFF5E6CE),
+                                        fontSize = 12.sp
+                                    )
+                                }
                             }
                         }
                     }
                 }
-            }
-
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .zIndex(2f)
-            ) {
-                Spacer(modifier = Modifier.height(12.dp))
-
-                // 1. Personaje Cinthia
-                CinthiaCharacter(state = gameState.cinthiaState)
-
-                Spacer(modifier = Modifier.weight(1f))
 
                 var activeDragCell by remember { mutableStateOf<Pair<Int, Int>?>(null) }
                 var dragOffsetX by remember { mutableFloatStateOf(0f) }
@@ -264,28 +289,73 @@ fun GameBoardScreen(
                 Box(
                     modifier = Modifier
                         .size(boardSize)
+                        .align(Alignment.TopCenter)
+                        .offset { 
+                            IntOffset(
+                                x = 0,
+                                y = with(LocalDensity.current) { preferredBoardTop.toPx().roundToInt() }
+                            )
+                        }
+                        .zIndex(2f)
                         .graphicsLayer {
                             translationX = shakeOffset.value.x
                             translationY = shakeOffset.value.y
                         }
-                        .background(Color(0xFF2C1B18), shape = RoundedCornerShape(16.dp))
-                        .border(
-                            width = if (isSelectingBoosterTarget) 4.dp else 4.dp,
-                            color = if (isSelectingBoosterTarget) Color(0xFFFFD700) else Color(0xFF8D6E63),
-                            shape = RoundedCornerShape(16.dp)
+                        .then(
+                            if (isSelectingBoosterTarget) {
+                                Modifier.border(4.dp, Color(0xFFFFD700), RoundedCornerShape(16.dp))
+                            } else Modifier
                         )
-                        .padding(12.dp)
                 ) {
-                    for (r in 0 until 8) {
-                        for (c in 0 until 8) {
-                            val piece = gameState.grid.getOrNull(r)?.getOrNull(c)
+                    Image(
+                        painter = painterResource(id = R.drawable.board_frame),
+                        contentDescription = null,
+                        contentScale = ContentScale.FillBounds,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                    
+                    val boardCellBitmap = androidx.compose.ui.graphics.ImageBitmap.imageResource(id = R.drawable.board_cell)
+                    
+                    androidx.compose.foundation.Canvas(modifier = Modifier.fillMaxSize().padding(boardInset)) {
+                        val totalW = size.width
+                        val totalH = size.height
+                        
+                        drawRect(color = Color(0xFF4E342E), size = size)
+                        
+                        for (r in 0 until 8) {
+                            for (c in 0 until 8) {
+                                val left = (c * totalW / 8f).roundToInt()
+                                val top = (r * totalH / 8f).roundToInt()
+                                val right = ((c + 1) * totalW / 8f).roundToInt()
+                                val bottom = ((r + 1) * totalH / 8f).roundToInt()
+                                
+                                drawImage(
+                                    image = boardCellBitmap,
+                                    dstOffset = IntOffset(left, top),
+                                    dstSize = androidx.compose.ui.unit.IntSize(right - left, bottom - top)
+                                )
+                            }
+                        }
+                    }
+
+                    Box(modifier = Modifier.fillMaxSize().padding(boardInset)) {
+                        val totalW = with(LocalDensity.current) { (boardSize - boardInset * 2f).toPx() }
+                        val totalH = totalW
+
+                        for (r in 0 until 8) {
+                            for (c in 0 until 8) {
+                                val left = (c * totalW / 8f).roundToInt()
+                                val top = (r * totalH / 8f).roundToInt()
+                                val right = ((c + 1) * totalW / 8f).roundToInt()
+                                val bottom = ((r + 1) * totalH / 8f).roundToInt()
+                                val cellWidth = with(LocalDensity.current) { (right - left).toDp() }
+                                val cellHeight = with(LocalDensity.current) { (bottom - top).toDp() }
+
+                                val piece = gameState.grid.getOrNull(r)?.getOrNull(c)
                             if (piece != null && !piece.isEmpty) {
                                 val isMatched = gameState.matchParticles.contains(r to c)
                                 key(piece.id) {
-                                    val targetOffset = IntOffset(
-                                        x = (c * cellSizePx).roundToInt(),
-                                        y = (r * cellSizePx).roundToInt()
-                                    )
+                                    val targetOffset = IntOffset(left, top)
                                     val animatedOffset by animateIntOffsetAsState(
                                         targetValue = targetOffset,
                                         animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing),
@@ -343,7 +413,7 @@ fun GameBoardScreen(
                                         isMatched = isMatched,
                                         modifier = Modifier
                                             .offset { renderOffset }
-                                            .size(cellSize)
+                                            .size(cellWidth, cellHeight)
                                             .pointerInput(r, c, isSelectingBoosterTarget) {
                                                 detectTapGestures {
                                                     viewModel.onPieceTapped(r, c)
@@ -421,12 +491,10 @@ fun GameBoardScreen(
                                 }
                             }
                         }
-                    }
-                }
-
-                Spacer(modifier = Modifier.weight(1f))
-            }
-        }
+                    } // closes padding Box
+                } // closes board container Box
+            } // closes board outer Box
+        } // closes Scaffold content
 
         if (gameState.isGameWon) {
             VictoryDialog(
@@ -453,47 +521,73 @@ fun GameBoardScreen(
             )
         }
     }
+    }
 }
 
 @Composable
-fun CinthiaCharacter(state: CinthiaState) {
-    val infiniteTransition = rememberInfiniteTransition(label = "breathing")
-    val scale by infiniteTransition.animateFloat(
-        initialValue = 1f,
-        targetValue = 1.05f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1200, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "scale"
-    )
-
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier.graphicsLayer {
-            scaleX = scale
-            scaleY = scale
-        }
-    ) {
-        Image(
-            painter = rememberVectorPainter(
-                image = when (state) {
-                    CinthiaState.IDLE -> Icons.Default.Face
-                    CinthiaState.CHEERING -> Icons.Default.Star
-                    CinthiaState.WORRIED -> Icons.Default.Warning
-                    CinthiaState.SAD -> Icons.Default.SentimentVeryDissatisfied
-                }
-            ),
-            contentDescription = "Cinthia",
-            contentScale = ContentScale.Fit,
-            modifier = Modifier
-                .size(110.dp)
-                .shadow(12.dp, CircleShape)
-                .background(Color(0xFF8D6E63), CircleShape)
-                .padding(16.dp),
-            colorFilter = ColorFilter.tint(Color(0xFFFFE0B2))
+fun CinthiaCharacter(state: CinthiaState, size: androidx.compose.ui.unit.Dp) {
+    val frames = remember {
+        listOf(
+            R.drawable.cinthia_idle_01, R.drawable.cinthia_idle_02,
+            R.drawable.cinthia_idle_03, R.drawable.cinthia_idle_04,
+            R.drawable.cinthia_idle_05, R.drawable.cinthia_idle_06,
+            R.drawable.cinthia_idle_07, R.drawable.cinthia_idle_08,
+            R.drawable.cinthia_idle_09, R.drawable.cinthia_idle_10,
+            R.drawable.cinthia_idle_11, R.drawable.cinthia_idle_12
         )
     }
+
+    val infiniteTransition = rememberInfiniteTransition(label = "cinthia_anim")
+    val frameIndex by infiniteTransition.animateValue(
+        initialValue = 0,
+        targetValue = 11,
+        typeConverter = Int.VectorConverter,
+        animationSpec = infiniteRepeatable(
+            animation = tween(12 * 120, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "frame"
+    )
+
+    val currentFrame = if (state == CinthiaState.SAD) frames[0] else frames[frameIndex]
+
+    val jump by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = if (state == CinthiaState.CHEERING) -20f else 0f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(300, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "jump"
+    )
+
+    val shake by infiniteTransition.animateFloat(
+        initialValue = if (state == CinthiaState.WORRIED) -5f else 0f,
+        targetValue = if (state == CinthiaState.WORRIED) 5f else 0f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(100, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "shake"
+    )
+
+    val colorMatrix = remember(state) {
+        if (state == CinthiaState.SAD) {
+            ColorMatrix().apply { setToSaturation(0f) }
+        } else {
+            ColorMatrix()
+        }
+    }
+
+    Image(
+        painter = painterResource(id = currentFrame),
+        contentDescription = "Cinthia",
+        contentScale = ContentScale.Fit,
+        modifier = Modifier
+            .size(size)
+            .offset(x = shake.dp, y = jump.dp),
+        colorFilter = ColorFilter.colorMatrix(colorMatrix)
+    )
 }
 
 @Composable
@@ -591,7 +685,7 @@ fun AdMobPlaceholder() {
         modifier = Modifier
             .fillMaxWidth()
             .height(50.dp)
-            .background(Color(0xFF2C1B18)),
+            .background(Color.Black.copy(alpha = 0.35f)),
         contentAlignment = Alignment.Center
     ) {
         Text(

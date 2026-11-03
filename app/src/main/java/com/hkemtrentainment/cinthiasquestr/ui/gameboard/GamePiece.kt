@@ -6,8 +6,10 @@ import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
@@ -25,13 +27,17 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import java.util.UUID
 
-enum class GamePieceType(val color: Color) {
-    RED(Color(0xFFE53935)),
-    BLUE(Color(0xFF1E88E5)),
-    GREEN(Color(0xFF43A047)),
-    YELLOW(Color(0xFFFDD835)),
-    PURPLE(Color(0xFF8E24AA)),
-    ORANGE(Color(0xFFFB8C00))
+import androidx.compose.foundation.Image
+import androidx.compose.ui.res.painterResource
+import com.hkemtrentainment.cinthiasquestr.R
+
+enum class GamePieceType(val drawableResId: Int) {
+    RED(R.drawable.gem_red),
+    BLUE(R.drawable.gem_blue),
+    GREEN(R.drawable.gem_green),
+    YELLOW(R.drawable.gem_yellow),
+    PURPLE(R.drawable.gem_purple),
+    MAGENTA(R.drawable.gem_magenta)
 }
 
 enum class GamePiecePowerUp {
@@ -82,7 +88,6 @@ fun GamePieceItem(
         modifier = modifier
             .padding(2.dp)
             .scale(scale)
-            .shadow(4.dp, shape)
             .then(
                 if (isColorBomb) {
                     Modifier.background(
@@ -99,16 +104,20 @@ fun GamePieceItem(
                         shape
                     )
                 } else {
-                    Modifier.background(piece.type.color, shape)
+                    Modifier // TODO: Implement COLOR_BOMB sprite
                 }
-            )
-            .border(
-                width = if (piece.powerUp != GamePiecePowerUp.NONE) 2.5.dp else 2.dp,
-                color = if (piece.powerUp != GamePiecePowerUp.NONE) Color(0xFFFFD700) else Color.White.copy(alpha = 0.5f),
-                shape = shape
             ),
         contentAlignment = Alignment.Center
     ) {
+        if (!isColorBomb) {
+            Image(
+                painter = painterResource(id = piece.type.drawableResId),
+                contentDescription = piece.type.name,
+                contentScale = ContentScale.Fit,
+                modifier = Modifier.fillMaxSize()
+            )
+        }
+
         if (piece.powerUp != GamePiecePowerUp.NONE) {
             val icon = when (piece.powerUp) {
                 GamePiecePowerUp.LINE_BLASTER -> Icons.Default.FlashOn
@@ -121,7 +130,7 @@ fun GamePieceItem(
                     imageVector = icon,
                     contentDescription = piece.powerUp.name,
                     tint = Color.White,
-                    modifier = Modifier.size(22.dp)
+                    modifier = Modifier.size(22.dp) // Glow sutil no rectangular puede lograrse si la gema ya lo tiene o con Shadow/Modifier.
                 )
             }
         }
