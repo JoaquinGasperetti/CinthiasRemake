@@ -1,6 +1,7 @@
 package com.hkemtrentainment.cinthiasquestr.ui.gameboard
 
 import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
@@ -25,6 +26,14 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import java.util.UUID
 
 import androidx.compose.foundation.Image
@@ -82,15 +91,22 @@ fun GamePieceItem(
     )
 
     val isColorBomb = piece.powerUp == GamePiecePowerUp.COLOR_BOMB
-    val shape = RoundedCornerShape(8.dp)
+    val hasPowerUp = piece.powerUp != GamePiecePowerUp.NONE
 
     Box(
         modifier = modifier
             .padding(2.dp)
-            .scale(scale)
-            .then(
-                if (isColorBomb) {
-                    Modifier.background(
+            .scale(scale),
+        contentAlignment = Alignment.Center
+    ) {
+        if (isColorBomb) {
+            // TODO: reemplazar por sprite propio de la Bomba de color cuando exista el arte.
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(3.dp)
+                    .clip(CircleShape)
+                    .background(
                         Brush.sweepGradient(
                             listOf(
                                 Color(0xFFE53935),
@@ -100,16 +116,14 @@ fun GamePieceItem(
                                 Color(0xFF8E24AA),
                                 Color(0xFFE53935)
                             )
-                        ),
-                        shape
+                        )
                     )
-                } else {
-                    Modifier // TODO: Implement COLOR_BOMB sprite
-                }
-            ),
-        contentAlignment = Alignment.Center
-    ) {
-        if (!isColorBomb) {
+                    .border(2.dp, Color(0xFFFFD700), CircleShape)
+            )
+        } else {
+            if (hasPowerUp) {
+                PowerUpGlow()
+            }
             Image(
                 painter = painterResource(id = piece.type.drawableResId),
                 contentDescription = piece.type.name,
@@ -118,7 +132,7 @@ fun GamePieceItem(
             )
         }
 
-        if (piece.powerUp != GamePiecePowerUp.NONE) {
+        if (hasPowerUp) {
             val icon = when (piece.powerUp) {
                 GamePiecePowerUp.LINE_BLASTER -> Icons.Default.FlashOn
                 GamePiecePowerUp.EXPLOSIVE_BOMB -> Icons.Default.Star
@@ -130,9 +144,39 @@ fun GamePieceItem(
                     imageVector = icon,
                     contentDescription = piece.powerUp.name,
                     tint = Color.White,
-                    modifier = Modifier.size(22.dp) // Glow sutil no rectangular puede lograrse si la gema ya lo tiene o con Shadow/Modifier.
+                    modifier = Modifier.size(22.dp)
                 )
             }
         }
     }
+}
+
+/** Resplandor dorado circular y pulsante detrás de las gemas con power-up (no rectangular). */
+@Composable
+private fun PowerUpGlow() {
+    val transition = rememberInfiniteTransition(label = "powerUpGlow")
+    val glowAlpha by transition.animateFloat(
+        initialValue = 0.35f,
+        targetValue = 0.85f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(900, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "glowAlpha"
+    )
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .drawBehind {
+                val radius = size.minDimension / 2f
+                drawCircle(
+                    brush = Brush.radialGradient(
+                        colors = listOf(Color(0xFFFFD700).copy(alpha = glowAlpha), Color.Transparent),
+                        center = center,
+                        radius = radius
+                    ),
+                    radius = radius
+                )
+            }
+    )
 }

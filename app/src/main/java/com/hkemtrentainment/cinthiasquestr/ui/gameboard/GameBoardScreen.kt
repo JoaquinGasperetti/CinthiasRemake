@@ -293,7 +293,7 @@ fun GameBoardScreen(
                         .offset { 
                             IntOffset(
                                 x = 0,
-                                y = with(LocalDensity.current) { preferredBoardTop.toPx().roundToInt() }
+                                y = preferredBoardTop.roundToPx()
                             )
                         }
                         .zIndex(2f)
@@ -540,7 +540,7 @@ fun CinthiaCharacter(state: CinthiaState, size: androidx.compose.ui.unit.Dp) {
     val infiniteTransition = rememberInfiniteTransition(label = "cinthia_anim")
     val frameIndex by infiniteTransition.animateValue(
         initialValue = 0,
-        targetValue = 11,
+        targetValue = 12,
         typeConverter = Int.VectorConverter,
         animationSpec = infiniteRepeatable(
             animation = tween(12 * 120, easing = LinearEasing),
@@ -549,7 +549,7 @@ fun CinthiaCharacter(state: CinthiaState, size: androidx.compose.ui.unit.Dp) {
         label = "frame"
     )
 
-    val currentFrame = if (state == CinthiaState.SAD) frames[0] else frames[frameIndex]
+    val currentFrame = if (state == CinthiaState.SAD) frames[0] else frames[frameIndex.coerceIn(0, frames.lastIndex)]
 
     val jump by infiniteTransition.animateFloat(
         initialValue = 0f,
