@@ -3,6 +3,7 @@ package com.hkemtrentainment.cinthiasquestr.ui.gameboard
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.hkemtrentainment.cinthiasquestr.audio.GameSound
 import com.hkemtrentainment.cinthiasquestr.data.PlayerRepository
 import com.hkemtrentainment.cinthiasquestr.data.WorldRepository
 import kotlinx.coroutines.delay
@@ -46,6 +47,7 @@ sealed class GameEffect {
     data object MatchHaptic : GameEffect()
     data object ComboHaptic : GameEffect()
     data object ScreenShake : GameEffect()
+    data class PlaySound(val sound: GameSound, val delayMs: Long = 0L) : GameEffect()
 }
 
 enum class SwipeDirection {
@@ -63,7 +65,7 @@ class GameViewModel(
 
     val gameState: StateFlow<GameUIState> = uiState
 
-    private val _effects = MutableSharedFlow<GameEffect>()
+    private val _effects = MutableSharedFlow<GameEffect>(extraBufferCapacity = 32)
     val effects: SharedFlow<GameEffect> = _effects.asSharedFlow()
 
     private val logicalGrid = MutableList(8) { MutableList(8) { GamePiece(type = randomType()) } }
@@ -162,13 +164,20 @@ class GameViewModel(
                     boardState = BoardState.RESOLVING
                 )
             }
-            resolveMatches(listOf(specialSwapCoords), swapOrigin = r2 to c2)
+            resolveMatches(
+                initialMatches = listOf(specialSwapCoords),
+                swapOrigin = r2 to c2,
+                isSpecialSwap = true
+            )
             return
         }
 
         // 2. Verificar matches normales de 3 o más piezas
         val matches = findMatches()
         if (matches.isEmpty()) {
+            // Sonido de movimiento inválido (Tile_Invalid.WAV)
+            _effects.emit(GameEffect.PlaySound(GameSound.TILE_INVALID))
+
             // Deshacer swap si no hay combinación válida
             val tempBack = logicalGrid[r1][c1]
             logicalGrid[r1][c1] = logicalGrid[r2][c2]
@@ -231,19 +240,19 @@ class GameViewModel(
         return emptySet()
     }
 
-    private fun expandWithPowerUps(seedCoords: Set<Pair<Int, Int>>): Pair<Set<Pair<Int, Int>>, Boolean> {
+    private fun expandWithPowerUps(seedCoords: Set<Pair<Int, Int>>): Pair<Set<Pair<Int, Int>>, Set<GamePiecePowerUp>> {
         val finalDestructionSet = seedCoords.toMutableSet()
         val queue = ArrayDeque<Pair<Int, Int>>()
         queue.addAll(seedCoords)
         val processedPowerUps = mutableSetOf<Pair<Int, Int>>()
-        var powerUpTriggered = false
+        val triggeredPowerUps = mutableSetOf<GamePiecePowerUp>()
 
         while (queue.isNotEmpty()) {
             val coord = queue.poll() ?: continue
             val piece = logicalGrid[coord.first][coord.second]
             if (!piece.isEmpty && piece.powerUp != GamePiecePowerUp.NONE && coord !in processedPowerUps) {
                 processedPowerUps.add(coord)
-                powerUpTriggered = true
+                triggeredPowerUps.add(piece.powerUp)
 
                 when (piece.powerUp) {
                     GamePiecePowerUp.LINE_BLASTER -> {
@@ -277,12 +286,13 @@ class GameViewModel(
                 }
             }
         }
-        return finalDestructionSet to powerUpTriggered
+        return finalDestructionSet to triggeredPowerUps
     }
 
     private suspend fun resolveMatches(
         initialMatches: List<Set<Pair<Int, Int>>>,
-        swapOrigin: Pair<Int, Int>? = null
+        swapOrigin: Pair<Int, Int>? = null,
+        isSpecialSwap: Boolean = false
     ) {
         var matches = initialMatches
         var combo = 0
@@ -298,7 +308,8 @@ class GameViewModel(
             }
 
             val allMatchedCoords = matches.flatten().toSet()
-            val (finalDestructionSet, powerUpTriggered) = expandWithPowerUps(allMatchedCoords)
+            val (finalDestructionSet, triggeredPowerUps) = expandWithPowerUps(allMatchedCoords)
+            val powerUpTriggered = triggeredPowerUps.isNotEmpty() || isSpecialSwap
 
             // Generar nuevos power-ups si hubo alineaciones de 4, 5 o L/T
             val powerUpsToSpawn = mutableListOf<Triple<Int, Int, GamePiecePowerUp>>()
@@ -308,6 +319,36 @@ class GameViewModel(
                     val spawnPos = if (swapOrigin != null && swapOrigin in matchSet) swapOrigin else matchSet.first()
                     powerUpsToSpawn.add(Triple(spawnPos.first, spawnPos.second, powerUp))
                 }
+            }
+
+            // 1. Sonido de combinación (Match_Triple, Match_SuccessGem o Match_Combo)
+            val hasBigMatch = powerUpsToSpawn.isNotEmpty() || matches.any { it.size >= 4 } || (isSpecialSwap && combo == 1)
+            when {
+                combo >= 2 -> _effects.emit(GameEffect.PlaySound(GameSound.MATCH_COMBO))
+                hasBigMatch -> _effects.emit(GameEffect.PlaySound(GameSound.MATCH_SUCCESS_GEM))
+                else -> _effects.emit(GameEffect.PlaySound(GameSound.MATCH_TRIPLE))
+            }
+
+            // 2. Sonido de explosión de Bomba / Power-Up activado (Bomb_Explode o Bomb_ExplodeRed)
+            if (GamePiecePowerUp.COLOR_BOMB in triggeredPowerUps || (isSpecialSwap && combo == 1)) {
+                _effects.emit(GameEffect.PlaySound(GameSound.BOMB_EXPLODE_RED))
+            } else if (triggeredPowerUps.isNotEmpty()) {
+                _effects.emit(GameEffect.PlaySound(GameSound.BOMB_EXPLODE))
+            }
+
+            // 3. Sonido de creación/carga de nuevo Power-Up (BombPower_Full o BombPower_Rise)
+            if (powerUpsToSpawn.isNotEmpty()) {
+                val spawnedTypes = powerUpsToSpawn.map { it.third }.toSet()
+                if (GamePiecePowerUp.COLOR_BOMB in spawnedTypes || GamePiecePowerUp.EXPLOSIVE_BOMB in spawnedTypes) {
+                    _effects.emit(GameEffect.PlaySound(GameSound.BOMB_POWER_FULL, delayMs = 80L))
+                } else if (GamePiecePowerUp.LINE_BLASTER in spawnedTypes) {
+                    _effects.emit(GameEffect.PlaySound(GameSound.BOMB_POWER_RISE, delayMs = 80L))
+                }
+            }
+
+            // 4. Voz de celebración de Cinthia (Knight_Cheer_*) en combos o grandes explosiones
+            if (combo == 2 || (combo >= 4 && combo % 2 == 0) || (combo == 1 && powerUpTriggered)) {
+                _effects.emit(GameEffect.PlaySound(GameSound.KNIGHT_CHEER_COMBO, delayMs = 120L))
             }
 
             if (powerUpTriggered || combo > 1) {
@@ -351,6 +392,8 @@ class GameViewModel(
             _uiState.update { it.copy(boardState = BoardState.DROPPING) }
             applyGravity()
             syncUI()
+            // Sonido de caída / aterrizaje de gemas (Gem_Land01..03.WAV)
+            _effects.emit(GameEffect.PlaySound(GameSound.GEM_LAND, delayMs = 140L))
             delay(300)
 
             matches = findMatches()
@@ -526,6 +569,7 @@ class GameViewModel(
         } while (findMatches().isNotEmpty() || !hasPossibleMoves())
 
         syncUI()
+        _effects.emit(GameEffect.PlaySound(GameSound.GEM_LAND))
     }
 
     private fun checkGameOver() {
@@ -556,15 +600,45 @@ class GameViewModel(
                     doubleCoinsClaimed = false
                 )
             }
-        } else if (currentState.movesLeft <= 0) {
+
+            // Secuencia de sonidos de Victoria, Público, Cinthia y Medalla (Bronce/Plata/Oro)
+            viewModelScope.launch {
+                _effects.emit(GameEffect.PlaySound(GameSound.GAME_WON))
+                _effects.emit(GameEffect.PlaySound(GameSound.CROWD_VICTORY, delayMs = 250L))
+                _effects.emit(GameEffect.PlaySound(GameSound.KNIGHT_CHEER_VICTORY, delayMs = 550L))
+                val awardSound = when (stars) {
+                    3 -> GameSound.AWARD_GOLD
+                    2 -> GameSound.AWARD_SILVER
+                    else -> GameSound.AWARD_BRONZE
+                }
+                _effects.emit(GameEffect.PlaySound(awardSound, delayMs = 950L))
+            }
+        } else if (currentState.movesLeft <= 0 && !currentState.isGameOver) {
             _uiState.update {
                 it.copy(
                     isGameOver = true,
                     cinthiaState = CinthiaState.SAD
                 )
             }
-        } else if (currentState.movesLeft <= 5) {
+            // Secuencia de sonidos de Derrota y Público (Game_Lost.WAV + Crowd_Defeat.WAV)
+            viewModelScope.launch {
+                _effects.emit(GameEffect.PlaySound(GameSound.GAME_LOST))
+                _effects.emit(GameEffect.PlaySound(GameSound.CROWD_DEFEAT, delayMs = 300L))
+            }
+        } else if (currentState.movesLeft in 1..5 && !currentState.isGameOver) {
+            val wasAlreadyWorried = currentState.cinthiaState == CinthiaState.WORRIED
             _uiState.update { it.copy(cinthiaState = CinthiaState.WORRIED) }
+
+            viewModelScope.launch {
+                if (currentState.movesLeft == 1) {
+                    _effects.emit(GameEffect.PlaySound(GameSound.TIMER_COUNT_FINAL))
+                } else {
+                    _effects.emit(GameEffect.PlaySound(GameSound.TIMER_COUNT))
+                    if (!wasAlreadyWorried && currentState.movesLeft == 5) {
+                        _effects.emit(GameEffect.PlaySound(GameSound.KNIGHT_CHEER_KEEP_GOING, delayMs = 250L))
+                    }
+                }
+            }
         }
     }
 
@@ -574,6 +648,7 @@ class GameViewModel(
 
         _uiState.update { it.copy(doubleCoinsClaimed = true) }
         viewModelScope.launch {
+            _effects.emit(GameEffect.PlaySound(GameSound.KNIGHT_CHEER_COMBO))
             playerRepository.addCoins(state.earnedCoinsReward)
         }
     }
@@ -586,6 +661,9 @@ class GameViewModel(
                 cinthiaState = CinthiaState.IDLE
             )
         }
+        viewModelScope.launch {
+            _effects.emit(GameEffect.PlaySound(GameSound.KNIGHT_CHEER_KEEP_GOING))
+        }
     }
 
     fun cancelActiveBooster() {
@@ -595,6 +673,9 @@ class GameViewModel(
                     activeBooster = null,
                     boardState = BoardState.IDLE
                 )
+            }
+            viewModelScope.launch {
+                _effects.emit(GameEffect.PlaySound(GameSound.TILE_DESELECT))
             }
         }
     }
@@ -613,6 +694,7 @@ class GameViewModel(
         if (count > 0) {
             if (type == BoosterType.SHUFFLE) {
                 viewModelScope.launch {
+                    _effects.emit(GameEffect.PlaySound(GameSound.TILE_SELECT))
                     playerRepository.updateBoosterCount(BoosterType.SHUFFLE, -1)
                     shuffleBoard()
                     val matches = findMatches()
@@ -629,6 +711,13 @@ class GameViewModel(
                         boardState = BoardState.WAITING_FOR_BOOSTER_TARGET
                     )
                 }
+                viewModelScope.launch {
+                    _effects.emit(GameEffect.PlaySound(GameSound.BOMB_POWER_RISE))
+                }
+            }
+        } else {
+            viewModelScope.launch {
+                _effects.emit(GameEffect.PlaySound(GameSound.TILE_INVALID))
             }
         }
     }
@@ -640,6 +729,7 @@ class GameViewModel(
 
         viewModelScope.launch {
             val booster = state.activeBooster
+            _effects.emit(GameEffect.PlaySound(GameSound.TILE_SELECT))
             _uiState.update { it.copy(activeBooster = null, boardState = BoardState.RESOLVING) }
 
             val affected = mutableSetOf<Pair<Int, Int>>()
@@ -659,15 +749,44 @@ class GameViewModel(
 
             if (affected.isNotEmpty()) {
                 playerRepository.updateBoosterCount(booster, -1)
-                destroyPieces(affected)
+                destroyPieces(affected, boosterUsed = booster)
             } else {
                 _uiState.update { it.copy(boardState = BoardState.IDLE) }
             }
         }
     }
 
-    private suspend fun destroyPieces(coords: Set<Pair<Int, Int>>) {
-        val (finalDestructionSet, powerUpTriggered) = expandWithPowerUps(coords)
+    private suspend fun destroyPieces(
+        coords: Set<Pair<Int, Int>>,
+        boosterUsed: BoosterType? = null
+    ) {
+        val (finalDestructionSet, triggeredPowerUps) = expandWithPowerUps(coords)
+        val powerUpTriggered = triggeredPowerUps.isNotEmpty()
+
+        when (boosterUsed) {
+            BoosterType.HAMMER -> {
+                _effects.emit(GameEffect.PlaySound(GameSound.MATCH_STONE))
+                if (GamePiecePowerUp.COLOR_BOMB in triggeredPowerUps) {
+                    _effects.emit(GameEffect.PlaySound(GameSound.BOMB_EXPLODE_RED, delayMs = 80L))
+                } else if (powerUpTriggered) {
+                    _effects.emit(GameEffect.PlaySound(GameSound.BOMB_EXPLODE, delayMs = 80L))
+                }
+            }
+            BoosterType.DYNAMITE -> {
+                if (GamePiecePowerUp.COLOR_BOMB in triggeredPowerUps) {
+                    _effects.emit(GameEffect.PlaySound(GameSound.BOMB_EXPLODE_RED))
+                } else {
+                    _effects.emit(GameEffect.PlaySound(GameSound.BOMB_EXPLODE))
+                }
+            }
+            else -> {
+                if (GamePiecePowerUp.COLOR_BOMB in triggeredPowerUps) {
+                    _effects.emit(GameEffect.PlaySound(GameSound.BOMB_EXPLODE_RED))
+                } else if (powerUpTriggered) {
+                    _effects.emit(GameEffect.PlaySound(GameSound.BOMB_EXPLODE))
+                }
+            }
+        }
 
         if (powerUpTriggered) {
             _effects.emit(GameEffect.ComboHaptic)
@@ -704,6 +823,7 @@ class GameViewModel(
         _uiState.update { it.copy(boardState = BoardState.DROPPING) }
         applyGravity()
         syncUI()
+        _effects.emit(GameEffect.PlaySound(GameSound.GEM_LAND, delayMs = 140L))
         delay(300)
 
         val matches = findMatches()

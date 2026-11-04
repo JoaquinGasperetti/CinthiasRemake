@@ -80,13 +80,13 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.hkemtrentainment.cinthiasquestr.CinthiasQuestApp
+import com.hkemtrentainment.cinthiasquestr.audio.GameSound
 import com.hkemtrentainment.cinthiasquestr.data.WorldRepository
 import com.hkemtrentainment.cinthiasquestr.ui.gameboard.components.GameTopBar
 import com.hkemtrentainment.cinthiasquestr.ui.gameboard.components.OutOfMovesDialog
 import com.hkemtrentainment.cinthiasquestr.ui.gameboard.components.PauseDialog
 import com.hkemtrentainment.cinthiasquestr.ui.gameboard.components.VictoryDialog
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlin.math.abs
 import kotlin.math.roundToInt
@@ -116,12 +116,17 @@ fun GameBoardScreen(
     val gameState by viewModel.gameState.collectAsState()
     var showPauseDialog by remember { mutableStateOf(false) }
 
+    val context = LocalContext.current
+    val soundManager = remember(context) {
+        (context.applicationContext as CinthiasQuestApp).soundManager
+    }
+
     val haptic = LocalHapticFeedback.current
     val shakeOffset = remember { Animatable(Offset.Zero, Offset.VectorConverter) }
     val coroutineScope = rememberCoroutineScope()
 
     LaunchedEffect(Unit) {
-        viewModel.effects.collectLatest { effect ->
+        viewModel.effects.collect { effect ->
             when (effect) {
                 is GameEffect.SwipeHaptic -> {
                     haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
@@ -130,9 +135,11 @@ fun GameBoardScreen(
                     haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                 }
                 is GameEffect.ComboHaptic -> {
-                    repeat(3) {
-                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                        delay(50)
+                    coroutineScope.launch {
+                        repeat(3) {
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            delay(50)
+                        }
                     }
                 }
                 is GameEffect.ScreenShake -> {
@@ -145,6 +152,16 @@ fun GameBoardScreen(
                             shakeOffset.animateTo(randomOffset, tween(50))
                         }
                         shakeOffset.animateTo(Offset.Zero, spring())
+                    }
+                }
+                is GameEffect.PlaySound -> {
+                    if (effect.delayMs > 0L) {
+                        coroutineScope.launch {
+                            delay(effect.delayMs)
+                            soundManager.play(effect.sound)
+                        }
+                    } else {
+                        soundManager.play(effect.sound)
                     }
                 }
             }
@@ -423,6 +440,9 @@ fun GameBoardScreen(
                                                 if (isSelectingBoosterTarget) return@pointerInput
                                                 detectDragGestures(
                                                     onDragStart = {
+                                                        if (gameState.boardState == BoardState.IDLE && !gameState.isGameOver && !gameState.isGameWon) {
+                                                            soundManager.play(GameSound.TILE_SELECT)
+                                                        }
                                                         activeDragCell = r to c
                                                         dragOffsetX = 0f
                                                         dragOffsetY = 0f
@@ -453,12 +473,14 @@ fun GameBoardScreen(
                                                         if (activeDragCell == r to c) {
                                                             val threshold = cellSizePx * 0.3f
                                                             val finalIsHorizontal = isHorizontalDrag
+                                                            var didSwipe = false
 
                                                             activeDragCell = null
                                                             isHorizontalDrag = null
 
                                                             if (finalIsHorizontal == true) {
                                                                 if (abs(dragOffsetX) > threshold) {
+                                                                    didSwipe = true
                                                                     if (dragOffsetX > 0) {
                                                                         viewModel.onSwipe(r, c, SwipeDirection.RIGHT)
                                                                     } else {
@@ -467,6 +489,7 @@ fun GameBoardScreen(
                                                                 }
                                                             } else if (finalIsHorizontal == false) {
                                                                 if (abs(dragOffsetY) > threshold) {
+                                                                    didSwipe = true
                                                                     if (dragOffsetY > 0) {
                                                                         viewModel.onSwipe(r, c, SwipeDirection.DOWN)
                                                                     } else {
@@ -475,11 +498,18 @@ fun GameBoardScreen(
                                                                 }
                                                             }
 
+                                                            if (!didSwipe && gameState.boardState == BoardState.IDLE) {
+                                                                soundManager.play(GameSound.TILE_DESELECT)
+                                                            }
+
                                                             dragOffsetX = 0f
                                                             dragOffsetY = 0f
                                                         }
                                                     },
                                                     onDragCancel = {
+                                                        if (activeDragCell != null && gameState.boardState == BoardState.IDLE) {
+                                                            soundManager.play(GameSound.TILE_DESELECT)
+                                                        }
                                                         activeDragCell = null
                                                         isHorizontalDrag = null
                                                         dragOffsetX = 0f

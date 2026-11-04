@@ -1,5 +1,6 @@
 package com.hkemtrentainment.cinthiasquestr
 
+import com.hkemtrentainment.cinthiasquestr.audio.SoundAsset
 import com.hkemtrentainment.cinthiasquestr.data.PlayerRepository
 import com.hkemtrentainment.cinthiasquestr.data.WorldRepository
 import org.junit.Assert.assertEquals
@@ -33,6 +34,17 @@ class GameLogicTest {
         for (lvl in 1..WorldRepository.MAX_GAME_LEVELS) {
             val world = WorldRepository.getWorldForLevel(lvl)
             assertTrue(lvl in world.startLevel..world.endLevel)
+        }
+    }
+
+    @Test
+    fun `all 33 sound assets are registered with valid filenames and raw identifiers`() {
+        assertEquals(33, SoundAsset.entries.size)
+        val rawNames = SoundAsset.entries.map { it.rawResName }.toSet()
+        assertEquals(33, rawNames.size)
+        for (asset in SoundAsset.entries) {
+            assertTrue(asset.fileName.endsWith(".WAV"))
+            assertTrue(asset.rawResName.matches(Regex("^[a-z0-9_]+$")))
         }
     }
 }
