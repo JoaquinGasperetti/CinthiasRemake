@@ -77,6 +77,26 @@ class GameLogicTest {
     }
 
     @Test
+    fun `daily reward can only be claimed once per calendar day`() {
+        val today = 20_000L
+        // Nunca reclamado antes (lastClaim = 0) -> permitido
+        assertTrue(PlayerRepository.evaluateCanClaimDailyReward(today, 0L))
+        assertEquals(1, PlayerRepository.computeNextDailyStreak(today, 0L, 1))
+
+        // Reclamado el mismo día (lastClaim = today) -> bloqueado (no reclamable infinitamente)
+        assertFalse(PlayerRepository.evaluateCanClaimDailyReward(today, today))
+        assertEquals(3, PlayerRepository.computeNextDailyStreak(today, today, 3))
+
+        // Reclamado ayer (lastClaim = today - 1) -> permitido y avanza racha
+        assertTrue(PlayerRepository.evaluateCanClaimDailyReward(today, today - 1L))
+        assertEquals(4, PlayerRepository.computeNextDailyStreak(today, today - 1L, 3))
+
+        // Si rompió la racha (hace 3 días) -> permitido pero reinicia a Día 1
+        assertTrue(PlayerRepository.evaluateCanClaimDailyReward(today, today - 3L))
+        assertEquals(1, PlayerRepository.computeNextDailyStreak(today, today - 3L, 5))
+    }
+
+    @Test
     fun `daily quests track completion and bitmask claiming accurately`() {
         val playerData = PlayerData(
             dailyMatchesCount = 25,

@@ -93,17 +93,22 @@ fun MainMenuScreen(
         ShopDialog(
             playerData = uiState.playerData,
             shopMessage = uiState.shopMessage,
-            onBuyBooster = {
-                soundManager.play(GameSound.MATCH_SUCCESS_GEM)
+            onBuyBooster = { booster ->
+                val canAfford = uiState.playerData.coins >= booster.priceCoins
+                soundManager.play(if (canAfford) GameSound.MATCH_SUCCESS_GEM else GameSound.TILE_INVALID)
                 if (uiState.playerData.hapticsEnabled) {
                     haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                 }
-                viewModel.buyBooster(it)
+                viewModel.buyBooster(booster)
             },
             onClaimBonusCoins = {
-                soundManager.play(GameSound.AWARD_GOLD)
-                if (uiState.playerData.hapticsEnabled) {
-                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                if (uiState.playerData.canClaimDailyReward) {
+                    soundManager.play(GameSound.AWARD_GOLD)
+                    if (uiState.playerData.hapticsEnabled) {
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    }
+                } else {
+                    soundManager.play(GameSound.TILE_INVALID)
                 }
                 viewModel.claimFreeBonusCoins()
             },
@@ -240,6 +245,12 @@ fun MainMenuScreen(
 
                 Spacer(modifier = Modifier.height(14.dp))
 
+                val shopButtonLabel = if (uiState.playerData.canClaimDailyReward) {
+                    "🎁 TIENDA · COFRE DÍA ${uiState.playerData.dailyLoginStreak} DISPONIBLE"
+                } else {
+                    "TIENDA DE OBJETOS"
+                }
+
                 OutlinedButton(
                     onClick = {
                         soundManager.play(GameSound.TILE_SELECT)
@@ -251,14 +262,17 @@ fun MainMenuScreen(
                     modifier = Modifier
                         .fillMaxWidth(0.75f)
                         .height(48.dp),
-                    border = BorderStroke(2.dp, Color(0xFF8D6E63)),
+                    border = BorderStroke(
+                        2.dp,
+                        if (uiState.playerData.canClaimDailyReward) Color(0xFFFFD700) else Color(0xFF8D6E63)
+                    ),
                     colors = ButtonDefaults.outlinedButtonColors(
                         contentColor = Color(0xFFF5E6CE)
                     ),
                     shape = RoundedCornerShape(12.dp)
                 ) {
                     Text(
-                        text = "TIENDA & COFRE DIARIO (DÍA ${uiState.playerData.dailyLoginStreak})",
+                        text = shopButtonLabel,
                         fontWeight = FontWeight.Bold,
                         fontSize = 12.sp
                     )

@@ -55,6 +55,10 @@ class PlayerRepository(private val dataStore: DataStore<Preferences>) {
             val today = currentEpochDay()
             val savedQuestDay = preferences[PreferencesKeys.DAILY_QUESTS_DAY] ?: today
             val isSameQuestDay = savedQuestDay == today
+            val lastClaimDay = preferences[PreferencesKeys.LAST_DAILY_CLAIM_DAY] ?: 0L
+            val savedDailyStreak = preferences[PreferencesKeys.DAILY_LOGIN_STREAK] ?: 1
+            val canClaimToday = evaluateCanClaimDailyReward(today, lastClaimDay)
+            val effectiveDailyStreak = computeNextDailyStreak(today, lastClaimDay, savedDailyStreak)
 
             PlayerData(
                 coins = preferences[PreferencesKeys.COINS] ?: 0,
@@ -65,8 +69,9 @@ class PlayerRepository(private val dataStore: DataStore<Preferences>) {
                 levelStars = parseStars(preferences[PreferencesKeys.LEVEL_STARS]),
                 winStreak = preferences[PreferencesKeys.WIN_STREAK] ?: 0,
                 bestWinStreak = preferences[PreferencesKeys.BEST_WIN_STREAK] ?: 0,
-                dailyLoginStreak = preferences[PreferencesKeys.DAILY_LOGIN_STREAK] ?: 1,
-                lastDailyClaimEpochDay = preferences[PreferencesKeys.LAST_DAILY_CLAIM_DAY] ?: 0L,
+                dailyLoginStreak = effectiveDailyStreak,
+                lastDailyClaimEpochDay = lastClaimDay,
+                canClaimDailyReward = canClaimToday,
                 dailyMatchesCount = if (isSameQuestDay) (preferences[PreferencesKeys.DAILY_MATCHES] ?: 0) else 0,
                 dailyPowerUpsTriggered = if (isSameQuestDay) (preferences[PreferencesKeys.DAILY_POWERUPS] ?: 0) else 0,
                 dailyLevelsCompleted = if (isSameQuestDay) (preferences[PreferencesKeys.DAILY_LEVELS] ?: 0) else 0,
@@ -170,6 +175,16 @@ class PlayerRepository(private val dataStore: DataStore<Preferences>) {
         }
     }
 
+    suspend fun restoreWinStreak(streak: Int) {
+        if (streak <= 0) return
+        dataStore.edit { preferences ->
+            val current = preferences[PreferencesKeys.WIN_STREAK] ?: 0
+            if (streak > current) {
+                preferences[PreferencesKeys.WIN_STREAK] = streak
+            }
+        }
+    }
+
     suspend fun recordMatchTelemetry(matchesMade: Int, powerUpsTriggered: Int) {
         if (matchesMade <= 0 && powerUpsTriggered <= 0) return
         val today = currentEpochDay()
@@ -187,13 +202,20 @@ class PlayerRepository(private val dataStore: DataStore<Preferences>) {
     }
 
     suspend fun claimDailyQuestReward(questId: Int, rewardCoins: Int): Boolean {
+        if (questId !in 0..2 || rewardCoins <= 0) return false
         val bit = 1 shl questId
         val today = currentEpochDay()
         var claimed = false
         dataStore.edit { preferences ->
             ensureDailyQuestsReset(preferences, today)
             val mask = preferences[PreferencesKeys.CLAIMED_QUESTS_MASK] ?: 0
-            if ((mask and bit) == 0) {
+            val hasRequiredProgress = when (questId) {
+                0 -> (preferences[PreferencesKeys.DAILY_MATCHES] ?: 0) >= 25
+                1 -> (preferences[PreferencesKeys.DAILY_POWERUPS] ?: 0) >= 5
+                2 -> (preferences[PreferencesKeys.DAILY_LEVELS] ?: 0) >= 2
+                else -> false
+            }
+            if ((mask and bit) == 0 && hasRequiredProgress) {
                 preferences[PreferencesKeys.CLAIMED_QUESTS_MASK] = mask or bit
                 val currentCoins = preferences[PreferencesKeys.COINS] ?: 0
                 preferences[PreferencesKeys.COINS] = currentCoins + rewardCoins
@@ -204,8 +226,8 @@ class PlayerRepository(private val dataStore: DataStore<Preferences>) {
     }
 
     /**
-     * Reclama el Cofre de Racha Diaria (escalando la recompensa según los días consecutivos).
-     * Si ya fue reclamado hoy, otorga una bonificación menor de cortesía o informa el estado.
+     * Reclama el Cofre de Racha Diaria UNA ÚNICA VEZ por día calendario (epochDay).
+     * Si ya fue reclamado hoy (`today <= lastDay`), devuelve `0 to currentStreak` sin sumar monedas.
      */
     suspend fun claimDailyStreakChest(): Pair<Int, Int> {
         val today = currentEpochDay()
@@ -213,21 +235,16 @@ class PlayerRepository(private val dataStore: DataStore<Preferences>) {
         var updatedStreak = 1
         dataStore.edit { preferences ->
             val lastDay = preferences[PreferencesKeys.LAST_DAILY_CLAIM_DAY] ?: 0L
-            val currentStreak = preferences[PreferencesKeys.DAILY_LOGIN_STREAK] ?: 1
+            val savedStreak = preferences[PreferencesKeys.DAILY_LOGIN_STREAK] ?: 1
 
-            updatedStreak = when {
-                lastDay == 0L -> 1
-                today == lastDay -> currentStreak
-                today == lastDay + 1L -> (currentStreak % 7) + 1
-                else -> 1
+            if (!evaluateCanClaimDailyReward(today, lastDay)) {
+                rewardGranted = 0
+                updatedStreak = savedStreak
+                return@edit
             }
 
-            rewardGranted = if (today > lastDay) {
-                computeDailyStreakReward(updatedStreak)
-            } else {
-                // Bonificación de recarga rápida si el jugador necesita monedas el mismo día
-                100
-            }
+            updatedStreak = computeNextDailyStreak(today, lastDay, savedStreak)
+            rewardGranted = computeDailyStreakReward(updatedStreak)
 
             preferences[PreferencesKeys.DAILY_LOGIN_STREAK] = updatedStreak
             preferences[PreferencesKeys.LAST_DAILY_CLAIM_DAY] = today
@@ -265,7 +282,7 @@ class PlayerRepository(private val dataStore: DataStore<Preferences>) {
 
     /**
      * Sincroniza de forma idempotente los datos de la nube con los locales,
-     * evitando duplicar monedas en cada inicio de la aplicación.
+     * evitando duplicar monedas o reiniciar el bloqueo del cofre diario.
      */
     suspend fun syncFromCloud(
         cloudCoins: Int,
@@ -275,7 +292,9 @@ class PlayerRepository(private val dataStore: DataStore<Preferences>) {
         cloudShuffle: Int,
         cloudStars: Map<Int, Int>,
         cloudWinStreak: Int = 0,
-        cloudBestWinStreak: Int = 0
+        cloudBestWinStreak: Int = 0,
+        cloudDailyLoginStreak: Int = 1,
+        cloudLastDailyClaimDay: Long = 0L
     ) {
         dataStore.edit { preferences ->
             val localCoins = preferences[PreferencesKeys.COINS] ?: 0
@@ -295,6 +314,12 @@ class PlayerRepository(private val dataStore: DataStore<Preferences>) {
 
             val localBestStreak = preferences[PreferencesKeys.BEST_WIN_STREAK] ?: 0
             preferences[PreferencesKeys.BEST_WIN_STREAK] = maxOf(localBestStreak, cloudBestWinStreak)
+
+            val localLastClaimDay = preferences[PreferencesKeys.LAST_DAILY_CLAIM_DAY] ?: 0L
+            if (cloudLastDailyClaimDay > localLastClaimDay) {
+                preferences[PreferencesKeys.LAST_DAILY_CLAIM_DAY] = cloudLastDailyClaimDay
+                preferences[PreferencesKeys.DAILY_LOGIN_STREAK] = cloudDailyLoginStreak.coerceIn(1, 7)
+            }
 
             val mergedStars = parseStars(preferences[PreferencesKeys.LEVEL_STARS]).toMutableMap()
             for ((lvl, stars) in cloudStars) {
@@ -334,6 +359,31 @@ class PlayerRepository(private val dataStore: DataStore<Preferences>) {
             return map.entries
                 .sortedBy { it.key }
                 .joinToString(",") { "${it.key}:${it.value}" }
+        }
+
+        /**
+         * Determina si el jugador puede reclamar la recompensa diaria en el día `todayEpochDay`.
+         * Solo devuelve `true` si el último reclamo fue en un día estrictamente anterior.
+         */
+        internal fun evaluateCanClaimDailyReward(todayEpochDay: Long, lastClaimEpochDay: Long): Boolean {
+            return todayEpochDay > lastClaimEpochDay
+        }
+
+        /**
+         * Calcula qué día de la racha (1..7) corresponde mostrar o reclamar hoy.
+         */
+        internal fun computeNextDailyStreak(
+            todayEpochDay: Long,
+            lastClaimEpochDay: Long,
+            savedStreak: Int
+        ): Int {
+            val safeSaved = savedStreak.coerceIn(1, 7)
+            return when {
+                lastClaimEpochDay <= 0L -> 1
+                todayEpochDay <= lastClaimEpochDay -> safeSaved
+                todayEpochDay == lastClaimEpochDay + 1L -> (safeSaved % 7) + 1
+                else -> 1
+            }
         }
 
         /**

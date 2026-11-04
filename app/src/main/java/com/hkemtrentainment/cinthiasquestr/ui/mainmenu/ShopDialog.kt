@@ -59,6 +59,7 @@ fun ShopDialog(
         label = "shopCoins"
     )
     val streakReward = PlayerRepository.computeDailyStreakReward(playerData.dailyLoginStreak)
+    val canClaimToday = playerData.canClaimDailyReward
 
     Dialog(onDismissRequest = onDismiss) {
         Card(
@@ -155,13 +156,26 @@ fun ShopDialog(
 
                 OutlinedButton(
                     onClick = onClaimBonusCoins,
+                    enabled = canClaimToday,
                     modifier = Modifier.fillMaxWidth(),
-                    border = BorderStroke(1.5.dp, Color(0xFF8D6E63)),
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF3E2723))
+                    border = BorderStroke(
+                        1.5.dp,
+                        if (canClaimToday) Color(0xFF2E7D32) else Color(0xFFBCAAA4)
+                    ),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = if (canClaimToday) Color(0xFF2E7D32) else Color(0xFF8D6E63),
+                        disabledContentColor = Color(0xFF8D6E63)
+                    )
                 ) {
                     Text(
-                        text = "🎁 Cofre Racha Diaria Día ${playerData.dailyLoginStreak} (+$streakReward 🪙)",
-                        fontWeight = FontWeight.Bold
+                        text = if (canClaimToday) {
+                            "🎁 Reclamar Cofre Día ${playerData.dailyLoginStreak}/7 (+$streakReward 🪙)"
+                        } else {
+                            "✓ Cofre Diario Reclamado (Día ${playerData.dailyLoginStreak}/7 · Vuelve mañana)"
+                        },
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 12.sp,
+                        textAlign = TextAlign.Center
                     )
                 }
             }

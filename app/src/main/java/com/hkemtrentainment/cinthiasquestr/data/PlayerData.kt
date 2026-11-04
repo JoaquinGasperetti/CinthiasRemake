@@ -28,8 +28,9 @@ data class PlayerData(
     // Retención y Meta-Progresión
     val winStreak: Int = 0, // Niveles ganados de forma consecutiva (otorga Power-Ups al inicio del nivel)
     val bestWinStreak: Int = 0,
-    val dailyLoginStreak: Int = 1, // Días consecutivos entrando al juego
+    val dailyLoginStreak: Int = 1, // Día actual de la racha diaria (1..7)
     val lastDailyClaimEpochDay: Long = 0L,
+    val canClaimDailyReward: Boolean = true, // true únicamente si no se ha reclamado hoy
     val dailyMatchesCount: Int = 0,
     val dailyPowerUpsTriggered: Int = 0,
     val dailyLevelsCompleted: Int = 0,

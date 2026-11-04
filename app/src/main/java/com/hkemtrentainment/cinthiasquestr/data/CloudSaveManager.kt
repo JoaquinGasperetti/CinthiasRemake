@@ -77,6 +77,8 @@ object CloudSaveManager {
                 val cloudShuffle = snapshot.getLong("shuffle")?.toInt() ?: 1
                 val cloudWinStreak = snapshot.getLong("winStreak")?.toInt() ?: 0
                 val cloudBestWinStreak = snapshot.getLong("bestWinStreak")?.toInt() ?: 0
+                val cloudDailyLoginStreak = snapshot.getLong("dailyLoginStreak")?.toInt() ?: 1
+                val cloudLastDailyClaimDay = snapshot.getLong("lastDailyClaimEpochDay") ?: 0L
 
                 val starsMapRaw = snapshot.get("levelStars") as? Map<*, *>
                 val cloudStars = starsMapRaw?.mapNotNull { (k, v) ->
@@ -95,7 +97,9 @@ object CloudSaveManager {
                     cloudShuffle = cloudShuffle,
                     cloudStars = cloudStars,
                     cloudWinStreak = cloudWinStreak,
-                    cloudBestWinStreak = cloudBestWinStreak
+                    cloudBestWinStreak = cloudBestWinStreak,
+                    cloudDailyLoginStreak = cloudDailyLoginStreak,
+                    cloudLastDailyClaimDay = cloudLastDailyClaimDay
                 )
             } else {
                 Log.d(TAG, "No cloud save document found yet for UID: $uid")
@@ -117,6 +121,7 @@ object CloudSaveManager {
                 "winStreak" to playerData.winStreak,
                 "bestWinStreak" to playerData.bestWinStreak,
                 "dailyLoginStreak" to playerData.dailyLoginStreak,
+                "lastDailyClaimEpochDay" to playerData.lastDailyClaimEpochDay,
                 "levelStars" to playerData.levelStars.mapKeys { it.key.toString() },
                 "lastUpdated" to System.currentTimeMillis()
             )

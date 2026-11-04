@@ -150,6 +150,7 @@ fun GameBoardScreen(
     onNextLevelClick: (Int) -> Unit = {},
     onWorldMapClick: () -> Unit = onPauseClick,
     viewModel: GameViewModel = viewModel(
+        key = "game_level_$selectedLevel",
         factory = GameViewModel.Factory(
             playerRepository = (LocalContext.current.applicationContext as CinthiasQuestApp).playerRepository,
             selectedLevel = selectedLevel
@@ -376,7 +377,10 @@ fun GameBoardScreen(
                     level = gameState.level,
                     coins = gameState.coins,
                     winStreak = gameState.winStreak,
-                    onPauseClick = { showPauseDialog = true }
+                    onPauseClick = {
+                        viewModel.cancelActiveBooster()
+                        showPauseDialog = true
+                    }
                 )
             },
             bottomBar = {
@@ -485,6 +489,16 @@ fun GameBoardScreen(
                 var dragOffsetY by remember { mutableFloatStateOf(0f) }
                 var isHorizontalDrag by remember { mutableStateOf<Boolean?>(null) }
 
+                // Limpiar cualquier arrastre residual cuando el tablero cambia de estado o al revivir
+                LaunchedEffect(gameState.boardState, gameState.isGameOver, gameState.isGameWon) {
+                    if (gameState.boardState != BoardState.IDLE || gameState.isGameOver || gameState.isGameWon) {
+                        activeDragCell = null
+                        dragOffsetX = 0f
+                        dragOffsetY = 0f
+                        isHorizontalDrag = null
+                    }
+                }
+
                 val animatedDragX by animateFloatAsState(
                     targetValue = dragOffsetX,
                     animationSpec = tween(durationMillis = 100, easing = FastOutSlowInEasing),
@@ -553,11 +567,115 @@ fun GameBoardScreen(
                         }
                     }
 
-                    // Grilla interactiva de gemas
+                    // Grilla interactiva 8x8 con detección de gestos unificada en el contenedor
+                    // (evita que el re-key de piezas o diálogos como OutOfMovesDialog congelen los gestos)
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
                             .padding(boardInset)
+                            .pointerInput(selectedLevel) {
+                                detectTapGestures { tapOffset ->
+                                    if (size.width <= 0 || size.height <= 0) return@detectTapGestures
+                                    val c = ((tapOffset.x / size.width) * 8f).toInt().coerceIn(0, 7)
+                                    val r = ((tapOffset.y / size.height) * 8f).toInt().coerceIn(0, 7)
+                                    viewModel.onPieceTapped(r, c)
+                                }
+                            }
+                            .pointerInput(selectedLevel, cellSizePx) {
+                                detectDragGestures(
+                                    onDragStart = { startOffset ->
+                                        if (size.width <= 0 || size.height <= 0) return@detectDragGestures
+                                        val liveState = viewModel.gameState.value
+                                        if (liveState.boardState == BoardState.IDLE && !liveState.isGameOver && !liveState.isGameWon) {
+                                            val c = ((startOffset.x / size.width) * 8f).toInt().coerceIn(0, 7)
+                                            val r = ((startOffset.y / size.height) * 8f).toInt().coerceIn(0, 7)
+                                            soundManager.play(GameSound.TILE_SELECT)
+                                            activeDragCell = r to c
+                                            dragOffsetX = 0f
+                                            dragOffsetY = 0f
+                                            isHorizontalDrag = null
+                                        } else {
+                                            activeDragCell = null
+                                        }
+                                    },
+                                    onDrag = { change, dragAmount ->
+                                        change.consume()
+                                        val currentCell = activeDragCell ?: return@detectDragGestures
+                                        val liveState = viewModel.gameState.value
+                                        if (liveState.boardState != BoardState.IDLE || liveState.isGameOver || liveState.isGameWon) {
+                                            activeDragCell = null
+                                            dragOffsetX = 0f
+                                            dragOffsetY = 0f
+                                            isHorizontalDrag = null
+                                            return@detectDragGestures
+                                        }
+                                        val newX = dragOffsetX + dragAmount.x
+                                        val newY = dragOffsetY + dragAmount.y
+
+                                        if (isHorizontalDrag == null) {
+                                            if (abs(newX) > 6f || abs(newY) > 6f) {
+                                                isHorizontalDrag = abs(newX) >= abs(newY)
+                                            }
+                                        }
+
+                                        if (isHorizontalDrag == true) {
+                                            dragOffsetX = newX.coerceIn(-cellSizePx, cellSizePx)
+                                            dragOffsetY = 0f
+                                        } else if (isHorizontalDrag == false) {
+                                            dragOffsetX = 0f
+                                            dragOffsetY = newY.coerceIn(-cellSizePx, cellSizePx)
+                                        }
+                                    },
+                                    onDragEnd = {
+                                        val currentCell = activeDragCell
+                                        if (currentCell != null) {
+                                            val (r, c) = currentCell
+                                            val threshold = cellSizePx * 0.25f
+                                            val finalIsHorizontal = isHorizontalDrag
+                                            var didSwipe = false
+
+                                            activeDragCell = null
+                                            isHorizontalDrag = null
+
+                                            if (finalIsHorizontal == true) {
+                                                if (abs(dragOffsetX) > threshold) {
+                                                    didSwipe = true
+                                                    if (dragOffsetX > 0) {
+                                                        viewModel.onSwipe(r, c, SwipeDirection.RIGHT)
+                                                    } else {
+                                                        viewModel.onSwipe(r, c, SwipeDirection.LEFT)
+                                                    }
+                                                }
+                                            } else if (finalIsHorizontal == false) {
+                                                if (abs(dragOffsetY) > threshold) {
+                                                    didSwipe = true
+                                                    if (dragOffsetY > 0) {
+                                                        viewModel.onSwipe(r, c, SwipeDirection.DOWN)
+                                                    } else {
+                                                        viewModel.onSwipe(r, c, SwipeDirection.UP)
+                                                    }
+                                                }
+                                            }
+
+                                            if (!didSwipe && viewModel.gameState.value.boardState == BoardState.IDLE) {
+                                                soundManager.play(GameSound.TILE_DESELECT)
+                                            }
+
+                                            dragOffsetX = 0f
+                                            dragOffsetY = 0f
+                                        }
+                                    },
+                                    onDragCancel = {
+                                        if (activeDragCell != null && viewModel.gameState.value.boardState == BoardState.IDLE) {
+                                            soundManager.play(GameSound.TILE_DESELECT)
+                                        }
+                                        activeDragCell = null
+                                        isHorizontalDrag = null
+                                        dragOffsetX = 0f
+                                        dragOffsetY = 0f
+                                    }
+                                )
+                            }
                     ) {
                         val totalW = with(LocalDensity.current) { (boardSize - boardInset * 2f).toPx() }
                         val totalH = totalW
@@ -647,92 +765,6 @@ fun GameBoardScreen(
                                             modifier = Modifier
                                                 .offset { renderOffset }
                                                 .size(cellWidth, cellHeight)
-                                                .pointerInput(r, c, isSelectingBoosterTarget) {
-                                                    detectTapGestures {
-                                                        viewModel.onPieceTapped(r, c)
-                                                    }
-                                                }
-                                                .pointerInput(r, c, isSelectingBoosterTarget) {
-                                                    if (isSelectingBoosterTarget) return@pointerInput
-                                                    detectDragGestures(
-                                                        onDragStart = {
-                                                            if (gameState.boardState == BoardState.IDLE && !gameState.isGameOver && !gameState.isGameWon) {
-                                                                soundManager.play(GameSound.TILE_SELECT)
-                                                            }
-                                                            activeDragCell = r to c
-                                                            dragOffsetX = 0f
-                                                            dragOffsetY = 0f
-                                                            isHorizontalDrag = null
-                                                        },
-                                                        onDrag = { change, dragAmount ->
-                                                            change.consume()
-                                                            if (activeDragCell == r to c) {
-                                                                val newX = dragOffsetX + dragAmount.x
-                                                                val newY = dragOffsetY + dragAmount.y
-
-                                                                if (isHorizontalDrag == null) {
-                                                                    if (abs(newX) > 6f || abs(newY) > 6f) {
-                                                                        isHorizontalDrag = abs(newX) >= abs(newY)
-                                                                    }
-                                                                }
-
-                                                                if (isHorizontalDrag == true) {
-                                                                    dragOffsetX = newX.coerceIn(-cellSizePx, cellSizePx)
-                                                                    dragOffsetY = 0f
-                                                                } else if (isHorizontalDrag == false) {
-                                                                    dragOffsetX = 0f
-                                                                    dragOffsetY = newY.coerceIn(-cellSizePx, cellSizePx)
-                                                                }
-                                                            }
-                                                        },
-                                                        onDragEnd = {
-                                                            if (activeDragCell == r to c) {
-                                                                val threshold = cellSizePx * 0.26f
-                                                                val finalIsHorizontal = isHorizontalDrag
-                                                                var didSwipe = false
-
-                                                                activeDragCell = null
-                                                                isHorizontalDrag = null
-
-                                                                if (finalIsHorizontal == true) {
-                                                                    if (abs(dragOffsetX) > threshold) {
-                                                                        didSwipe = true
-                                                                        if (dragOffsetX > 0) {
-                                                                            viewModel.onSwipe(r, c, SwipeDirection.RIGHT)
-                                                                        } else {
-                                                                            viewModel.onSwipe(r, c, SwipeDirection.LEFT)
-                                                                        }
-                                                                    }
-                                                                } else if (finalIsHorizontal == false) {
-                                                                    if (abs(dragOffsetY) > threshold) {
-                                                                        didSwipe = true
-                                                                        if (dragOffsetY > 0) {
-                                                                            viewModel.onSwipe(r, c, SwipeDirection.DOWN)
-                                                                        } else {
-                                                                            viewModel.onSwipe(r, c, SwipeDirection.UP)
-                                                                        }
-                                                                    }
-                                                                }
-
-                                                                if (!didSwipe && gameState.boardState == BoardState.IDLE) {
-                                                                    soundManager.play(GameSound.TILE_DESELECT)
-                                                                }
-
-                                                                dragOffsetX = 0f
-                                                                dragOffsetY = 0f
-                                                            }
-                                                        },
-                                                        onDragCancel = {
-                                                            if (activeDragCell != null && gameState.boardState == BoardState.IDLE) {
-                                                                soundManager.play(GameSound.TILE_DESELECT)
-                                                            }
-                                                            activeDragCell = null
-                                                            isHorizontalDrag = null
-                                                            dragOffsetX = 0f
-                                                            dragOffsetY = 0f
-                                                        }
-                                                    )
-                                                }
                                         )
                                     }
                                 }
@@ -823,7 +855,7 @@ fun GameBoardScreen(
                             }
                         }
 
-                        // Capa de Textos Flotantes de Puntos y Combos ("+120", "¡DIVINO! x4")
+                        // Capa de Textos Flotantes de Puntos y Combos (sin Surface para no interceptar toques)
                         FloatingPopupsOverlay(
                             popups = gameState.floatingPopups,
                             boardInnerSizePx = totalW
@@ -918,17 +950,20 @@ private fun FloatingPopupsOverlay(
                         }
                 ) {
                     if (popup.calloutText != null) {
-                        Surface(
-                            color = Color(0xFF3E2723).copy(alpha = 0.92f),
-                            shape = RoundedCornerShape(10.dp),
-                            border = androidx.compose.foundation.BorderStroke(1.5.dp, Color(0xFFFFD700))
+                        Box(
+                            modifier = Modifier
+                                .background(
+                                    color = Color(0xFF3E2723).copy(alpha = 0.92f),
+                                    shape = RoundedCornerShape(10.dp)
+                                )
+                                .border(1.5.dp, Color(0xFFFFD700), RoundedCornerShape(10.dp))
+                                .padding(horizontal = 8.dp, vertical = 2.dp)
                         ) {
                             Text(
                                 text = popup.calloutText,
                                 color = Color(0xFFFFD700),
                                 fontSize = 11.sp,
-                                fontWeight = FontWeight.ExtraBold,
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                                fontWeight = FontWeight.ExtraBold
                             )
                         }
                     }
@@ -1044,18 +1079,18 @@ fun CinthiaCharacter(
                 .align(Alignment.TopEnd)
                 .offset(x = 24.dp, y = (-6).dp)
         ) {
-            Surface(
-                color = Color(0xFFFFF8E1),
-                shape = RoundedCornerShape(14.dp),
-                border = androidx.compose.foundation.BorderStroke(2.dp, Color(0xFF3E2723)),
-                shadowElevation = 6.dp
+            Box(
+                modifier = Modifier
+                    .shadow(6.dp, RoundedCornerShape(14.dp))
+                    .background(Color(0xFFFFF8E1), RoundedCornerShape(14.dp))
+                    .border(2.dp, Color(0xFF3E2723), RoundedCornerShape(14.dp))
+                    .padding(horizontal = 10.dp, vertical = 5.dp)
             ) {
                 Text(
                     text = displayBubble ?: "",
                     color = Color(0xFF3E2723),
                     fontSize = 11.sp,
-                    fontWeight = FontWeight.ExtraBold,
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                    fontWeight = FontWeight.ExtraBold
                 )
             }
         }

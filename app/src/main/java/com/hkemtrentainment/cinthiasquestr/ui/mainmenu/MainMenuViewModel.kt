@@ -24,6 +24,8 @@ class MainMenuViewModel(private val playerRepository: PlayerRepository) : ViewMo
     private val _uiState = MutableStateFlow(MainMenuUiState())
     val uiState: StateFlow<MainMenuUiState> = _uiState.asStateFlow()
 
+    private var isClaimingDailyChest = false
+
     init {
         viewModelScope.launch {
             playerRepository.playerDataFlow.collect { data ->
@@ -53,12 +55,24 @@ class MainMenuViewModel(private val playerRepository: PlayerRepository) : ViewMo
     }
 
     fun claimFreeBonusCoins() {
-        viewModelScope.launch {
-            val (reward, streakDay) = playerRepository.claimDailyStreakChest()
+        if (isClaimingDailyChest || !_uiState.value.playerData.canClaimDailyReward) {
             _uiState.update {
-                it.copy(
-                    shopMessage = "🎁 ¡Cofre de Racha Diaria (Día $streakDay): +$reward 🪙!"
-                )
+                it.copy(shopMessage = "Ya reclamaste tu Cofre Diario de hoy. ¡Vuelve mañana!")
+            }
+            return
+        }
+        isClaimingDailyChest = true
+        viewModelScope.launch {
+            try {
+                val (reward, streakDay) = playerRepository.claimDailyStreakChest()
+                val message = if (reward > 0) {
+                    "🎁 ¡Cofre de Racha Diaria (Día $streakDay): +$reward 🪙!"
+                } else {
+                    "Ya reclamaste tu Cofre Diario de hoy. ¡Vuelve mañana!"
+                }
+                _uiState.update { it.copy(shopMessage = message) }
+            } finally {
+                isClaimingDailyChest = false
             }
         }
     }
