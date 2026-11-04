@@ -8,6 +8,9 @@ import com.hkemtrentainment.cinthiasquestr.data.dataStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
 
 class CinthiasQuestApp : Application() {
     lateinit var playerRepository: PlayerRepository
@@ -23,6 +26,15 @@ class CinthiasQuestApp : Application() {
         playerRepository = PlayerRepository(dataStore)
         soundManager = SoundManager(this)
         CloudSaveManager.startSync(playerRepository, applicationScope)
+
+        applicationScope.launch {
+            playerRepository.playerDataFlow
+                .map { it.soundEnabled }
+                .distinctUntilChanged()
+                .collect { enabled ->
+                    soundManager.isSoundEnabled = enabled
+                }
+        }
     }
 
     override fun onTerminate() {

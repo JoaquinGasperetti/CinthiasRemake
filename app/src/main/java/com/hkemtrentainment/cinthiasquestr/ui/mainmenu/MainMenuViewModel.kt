@@ -3,6 +3,7 @@ package com.hkemtrentainment.cinthiasquestr.ui.mainmenu
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.hkemtrentainment.cinthiasquestr.data.DailyQuest
 import com.hkemtrentainment.cinthiasquestr.data.PlayerData
 import com.hkemtrentainment.cinthiasquestr.data.PlayerRepository
 import com.hkemtrentainment.cinthiasquestr.ui.gameboard.BoosterType
@@ -15,7 +16,8 @@ import kotlinx.coroutines.launch
 data class MainMenuUiState(
     val playerData: PlayerData = PlayerData(),
     val isShopOpen: Boolean = false,
-    val shopMessage: String? = null
+    val shopMessage: String? = null,
+    val questBannerMessage: String? = null
 )
 
 class MainMenuViewModel(private val playerRepository: PlayerRepository) : ViewModel() {
@@ -52,8 +54,24 @@ class MainMenuViewModel(private val playerRepository: PlayerRepository) : ViewMo
 
     fun claimFreeBonusCoins() {
         viewModelScope.launch {
-            playerRepository.addCoins(250)
-            _uiState.update { it.copy(shopMessage = "¡Recibiste +250 🪙 de bonificación!") }
+            val (reward, streakDay) = playerRepository.claimDailyStreakChest()
+            _uiState.update {
+                it.copy(
+                    shopMessage = "🎁 ¡Cofre de Racha Diaria (Día $streakDay): +$reward 🪙!"
+                )
+            }
+        }
+    }
+
+    fun claimDailyQuest(quest: DailyQuest) {
+        if (!quest.isCompleted || quest.isClaimed) return
+        viewModelScope.launch {
+            val success = playerRepository.claimDailyQuestReward(quest.id, quest.rewardCoins)
+            if (success) {
+                _uiState.update {
+                    it.copy(questBannerMessage = "🎉 ¡Misión '${quest.title}' completada! +${quest.rewardCoins} 🪙")
+                }
+            }
         }
     }
 

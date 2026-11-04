@@ -19,20 +19,24 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import com.hkemtrentainment.cinthiasquestr.data.PlayerRepository
 import com.hkemtrentainment.cinthiasquestr.data.WorldRepository
 
 @Composable
 fun LevelDetailDialog(
     levelNumber: Int,
     starsEarned: Int,
+    winStreak: Int = 0,
     onPlayClick: (Int) -> Unit,
     onDismiss: () -> Unit
 ) {
     val levelConfig = WorldRepository.getLevelConfig(levelNumber)
     val world = WorldRepository.getWorldForLevel(levelNumber)
+    val streakStarterCount = PlayerRepository.computeStreakStarterPowerUpsCount(winStreak)
 
     Dialog(onDismissRequest = onDismiss) {
         Card(
@@ -129,7 +133,7 @@ fun LevelDetailDialog(
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(20.dp))
+                    Spacer(modifier = Modifier.height(16.dp))
 
                     // Level Targets Info Card
                     Surface(
@@ -184,7 +188,26 @@ fun LevelDetailDialog(
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(24.dp))
+                    if (streakStarterCount > 0) {
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Surface(
+                            modifier = Modifier.fillMaxWidth(),
+                            color = Color(0xFF3E2723),
+                            shape = RoundedCornerShape(12.dp),
+                            border = BorderStroke(1.5.dp, Color(0xFFFFD700))
+                        ) {
+                            Text(
+                                text = "🔥 Racha x$winStreak activa: ¡Empezarás con +$streakStarterCount Power-Up${if (streakStarterCount > 1) "s" else ""} gratis en el tablero!",
+                                color = Color(0xFFFFD700),
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(20.dp))
 
                     // Play Button
                     Button(

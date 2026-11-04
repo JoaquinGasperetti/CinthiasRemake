@@ -17,6 +17,7 @@ data class WorldMapUiState(
     val maxUnlockedLevel: Int = 1,
     val levelStars: Map<Int, Int> = emptyMap(),
     val totalStars: Int = 0,
+    val winStreak: Int = 0,
     val selectedWorld: WorldConfig = WorldRepository.WORLDS.first(),
     val activeDetailLevel: Int? = null
 )
@@ -37,6 +38,7 @@ class WorldMapViewModel(private val playerRepository: PlayerRepository) : ViewMo
                         maxUnlockedLevel = playerData.level,
                         levelStars = playerData.levelStars,
                         totalStars = totalStars,
+                        winStreak = playerData.winStreak,
                         selectedWorld = currentWorld
                     )
                 }

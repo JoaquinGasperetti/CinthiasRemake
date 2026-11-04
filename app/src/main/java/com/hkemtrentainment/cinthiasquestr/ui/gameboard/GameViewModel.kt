@@ -4,8 +4,10 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.hkemtrentainment.cinthiasquestr.audio.GameSound
+import com.hkemtrentainment.cinthiasquestr.audio.SoundManager
 import com.hkemtrentainment.cinthiasquestr.data.PlayerRepository
 import com.hkemtrentainment.cinthiasquestr.data.WorldRepository
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -17,10 +19,36 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.util.ArrayDeque
 import java.util.UUID
+import kotlin.math.abs
 
 enum class BoardState {
-    IDLE, SWAPPING, RESOLVING, DROPPING, SHUFFLING, WAITING_FOR_BOOSTER_TARGET
+    IDLE, SWAPPING, RESOLVING, DROPPING, SHUFFLING, WAITING_FOR_BOOSTER_TARGET, BONUS_FINALE
 }
+
+/**
+ * Texto flotante de puntuación y elogios ("+120", "¡INCREÍBLE! x3") que emerge sobre el tablero.
+ */
+data class FloatingScorePopup(
+    val id: String = UUID.randomUUID().toString(),
+    val row: Float,
+    val col: Float,
+    val pointsText: String,
+    val calloutText: String? = null,
+    val colorHex: Long = 0xFFFFD700,
+    val scaleMultiplier: Float = 1.0f
+)
+
+/**
+ * Evento de explosión de partículas, rayos de Line Blaster y ondas expansivas en el Canvas del tablero.
+ */
+data class ParticleBurstEvent(
+    val id: String = UUID.randomUUID().toString(),
+    val cellColors: Map<Pair<Int, Int>, Long>,
+    val shockwaveCenters: List<Pair<Int, Int>> = emptyList(),
+    val lineBlasterRows: Set<Int> = emptySet(),
+    val lineBlasterCols: Set<Int> = emptySet(),
+    val isColorBombMega: Boolean = false
+)
 
 data class GameUIState(
     val grid: List<List<GamePiece>> = emptyList(),
@@ -31,23 +59,66 @@ data class GameUIState(
     val isGameWon: Boolean = false,
     val targetScore: Int = 2000,
     val cinthiaState: CinthiaState = CinthiaState.IDLE,
+    val cinthiaSpeech: String? = null,
     val lastMatchCombo: Int = 0,
     val matchParticles: Set<Pair<Int, Int>> = emptySet(),
+    val hitFlashCells: Set<Pair<Int, Int>> = emptySet(),
+    val selectedCell: Pair<Int, Int>? = null,
+    val hintCells: Set<Pair<Int, Int>> = emptySet(),
+    val invalidSwapCells: Set<Pair<Int, Int>> = emptySet(),
+    val floatingPopups: List<FloatingScorePopup> = emptyList(),
     val boosterInventory: Map<BoosterType, Int> = emptyMap(),
     val activeBooster: BoosterType? = null,
     val coins: Int = 0,
     val level: Int = 1,
     val earnedStars: Int = 0,
     val earnedCoinsReward: Int = 0,
-    val doubleCoinsClaimed: Boolean = false
-)
+    val bonusMovesScore: Int = 0,
+    val doubleCoinsClaimed: Boolean = false,
+    val winStreak: Int = 0,
+    val streakStarterCount: Int = 0,
+    val streakBannerText: String? = null,
+    val soundEnabled: Boolean = true,
+    val hapticsEnabled: Boolean = true,
+    val reducedMotion: Boolean = false
+) {
+    val progressToFirstStar: Float
+        get() = if (targetScore > 0) (score.toFloat() / targetScore).coerceIn(0f, 1f) else 0f
+
+    val progressToThreeStars: Float
+        get() {
+            val maxStarScore = (targetScore * 1.8f).coerceAtLeast(1f)
+            return (score.toFloat() / maxStarScore).coerceIn(0f, 1f)
+        }
+
+    val currentLiveStars: Int
+        get() = when {
+            score >= (targetScore * 1.8).toInt() -> 3
+            score >= (targetScore * 1.4).toInt() -> 2
+            score >= targetScore -> 1
+            else -> 0
+        }
+
+    val pointsNeededToWin: Int
+        get() = maxOf(0, targetScore - score)
+
+    val nearMissPercent: Int
+        get() = if (targetScore > 0) ((score * 100) / targetScore).coerceIn(0, 99) else 0
+}
 
 sealed class GameEffect {
     data object SwipeHaptic : GameEffect()
     data object MatchHaptic : GameEffect()
-    data object ComboHaptic : GameEffect()
-    data object ScreenShake : GameEffect()
-    data class PlaySound(val sound: GameSound, val delayMs: Long = 0L) : GameEffect()
+    data object InvalidMoveHaptic : GameEffect()
+    data class ComboHaptic(val intensity: Int = 2) : GameEffect()
+    data class ScreenShake(val intensityPx: Float = 10f, val cycles: Int = 5) : GameEffect()
+    data class SpawnParticles(val event: ParticleBurstEvent) : GameEffect()
+    data class PlaySound(
+        val sound: GameSound,
+        val delayMs: Long = 0L,
+        val rate: Float = 1.0f,
+        val volume: Float = 1.0f
+    ) : GameEffect()
 }
 
 enum class SwipeDirection {
@@ -65,10 +136,12 @@ class GameViewModel(
 
     val gameState: StateFlow<GameUIState> = uiState
 
-    private val _effects = MutableSharedFlow<GameEffect>(extraBufferCapacity = 32)
+    private val _effects = MutableSharedFlow<GameEffect>(extraBufferCapacity = 48)
     val effects: SharedFlow<GameEffect> = _effects.asSharedFlow()
 
     private val logicalGrid = MutableList(8) { MutableList(8) { GamePiece(type = randomType()) } }
+    private var idleHintJob: Job? = null
+    private var hasAppliedStreakBonusForSession = false
 
     init {
         val levelConfig = WorldRepository.getLevelConfig(safeLevel)
@@ -80,8 +153,11 @@ class GameViewModel(
             )
         }
 
+        initializeBoard()
+
         viewModelScope.launch {
             playerRepository.playerDataFlow.collect { playerData ->
+                val previousStreak = _uiState.value.winStreak
                 _uiState.update {
                     it.copy(
                         boosterInventory = mapOf(
@@ -89,12 +165,24 @@ class GameViewModel(
                             BoosterType.DYNAMITE to playerData.dynamite,
                             BoosterType.SHUFFLE to playerData.shuffle
                         ),
-                        coins = playerData.coins
+                        coins = playerData.coins,
+                        winStreak = playerData.winStreak,
+                        soundEnabled = playerData.soundEnabled,
+                        hapticsEnabled = playerData.hapticsEnabled,
+                        reducedMotion = playerData.reducedMotion
                     )
+                }
+
+                if (!hasAppliedStreakBonusForSession && playerData.winStreak > 0 && previousStreak == 0) {
+                    hasAppliedStreakBonusForSession = true
+                    applyStreakStarterPowerUps(playerData.winStreak)
+                } else if (!hasAppliedStreakBonusForSession) {
+                    hasAppliedStreakBonusForSession = true
                 }
             }
         }
-        initializeBoard()
+
+        scheduleIdleHintTimer()
     }
 
     private fun initializeBoard() {
@@ -111,6 +199,101 @@ class GameViewModel(
         } while (hasMatches || !hasPossibleMoves())
 
         syncUI()
+    }
+
+    /**
+     * Recompensa la Racha de Victorias (Win Streak) colocando de 1 a 3 Power-Ups gratis en el tablero
+     * al iniciar la partida, reforzando la retención mediante aversión a la pérdida (Loss Aversion).
+     */
+    private fun applyStreakStarterPowerUps(winStreak: Int) {
+        val count = PlayerRepository.computeStreakStarterPowerUpsCount(winStreak)
+        if (count <= 0) return
+
+        val candidateCoords = mutableListOf<Pair<Int, Int>>()
+        for (r in 1..6) {
+            for (c in 1..6) {
+                if (logicalGrid[r][c].powerUp == GamePiecePowerUp.NONE) {
+                    candidateCoords.add(r to c)
+                }
+            }
+        }
+        candidateCoords.shuffle()
+
+        val powerUpProgression = listOf(
+            GamePiecePowerUp.LINE_BLASTER,
+            GamePiecePowerUp.EXPLOSIVE_BOMB,
+            GamePiecePowerUp.COLOR_BOMB
+        )
+
+        val spawnedCoords = mutableMapOf<Pair<Int, Int>, Long>()
+        for (i in 0 until minOf(count, candidateCoords.size)) {
+            val (r, c) = candidateCoords[i]
+            val powerUpType = powerUpProgression[i % powerUpProgression.size]
+            val basePiece = logicalGrid[r][c]
+            logicalGrid[r][c] = basePiece.copy(powerUp = powerUpType)
+            spawnedCoords[r to c] = 0xFFFFD700L
+        }
+
+        syncUI()
+
+        viewModelScope.launch {
+            _effects.emit(GameEffect.PlaySound(GameSound.BOMB_POWER_RISE, rate = 1.1f))
+            _effects.emit(
+                GameEffect.SpawnParticles(
+                    ParticleBurstEvent(
+                        cellColors = spawnedCoords,
+                        shockwaveCenters = spawnedCoords.keys.toList()
+                    )
+                )
+            )
+            _uiState.update {
+                it.copy(
+                    streakStarterCount = count,
+                    cinthiaState = CinthiaState.CHEERING,
+                    cinthiaSpeech = "🔥 ¡Racha x$winStreak! +$count Power-Up${if (count > 1) "s" else ""}",
+                    streakBannerText = "🔥 RACHA DE VICTORIAS x$winStreak · +$count POWER-UP${if (count > 1) "S" else ""} INICIAL${if (count > 1) "ES" else ""}"
+                )
+            }
+            delay(2600)
+            _uiState.update {
+                it.copy(
+                    streakBannerText = null,
+                    cinthiaSpeech = null,
+                    cinthiaState = if (it.movesLeft <= 5) CinthiaState.WORRIED else CinthiaState.IDLE
+                )
+            }
+        }
+    }
+
+    private fun scheduleIdleHintTimer() {
+        idleHintJob?.cancel()
+        idleHintJob = viewModelScope.launch {
+            delay(IDLE_HINT_DELAY_MS)
+            val state = _uiState.value
+            if (state.boardState == BoardState.IDLE && !state.isGameOver && !state.isGameWon) {
+                val hintPair = findBestHintMove()
+                if (hintPair != null) {
+                    _uiState.update {
+                        it.copy(
+                            hintCells = setOf(hintPair.first, hintPair.second),
+                            cinthiaSpeech = "💡 ¡Prueba combinar aquí!"
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    private fun clearInteractionOverlays() {
+        idleHintJob?.cancel()
+        if (_uiState.value.hintCells.isNotEmpty() || _uiState.value.selectedCell != null) {
+            _uiState.update {
+                it.copy(
+                    hintCells = emptySet(),
+                    selectedCell = null
+                )
+            }
+        }
     }
 
     private fun randomType() = GamePieceType.entries.random()
@@ -135,13 +318,20 @@ class GameViewModel(
 
         if (targetRow !in 0..7 || targetCol !in 0..7) return
 
+        clearInteractionOverlays()
         viewModelScope.launch {
             processMove(row, col, targetRow, targetCol)
         }
     }
 
     private suspend fun processMove(r1: Int, c1: Int, r2: Int, c2: Int) {
-        _uiState.update { it.copy(boardState = BoardState.SWAPPING) }
+        _uiState.update {
+            it.copy(
+                boardState = BoardState.SWAPPING,
+                selectedCell = null,
+                hintCells = emptySet()
+            )
+        }
         _effects.emit(GameEffect.SwipeHaptic)
 
         // Intercambio lógico
@@ -150,7 +340,7 @@ class GameViewModel(
         logicalGrid[r2][c2] = temp
         syncUI()
 
-        delay(250) // Tiempo de animación de swap
+        delay(210) // Tiempo ágil de animación de swap
 
         val movedPiece = logicalGrid[r2][c2]
         val otherPiece = logicalGrid[r1][c1]
@@ -175,16 +365,24 @@ class GameViewModel(
         // 2. Verificar matches normales de 3 o más piezas
         val matches = findMatches()
         if (matches.isEmpty()) {
-            // Sonido de movimiento inválido (Tile_Invalid.WAV)
+            // Sonido y vibración de movimiento inválido + Shake en ambas fichas
             _effects.emit(GameEffect.PlaySound(GameSound.TILE_INVALID))
+            _effects.emit(GameEffect.InvalidMoveHaptic)
+            _uiState.update { it.copy(invalidSwapCells = setOf(r1 to c1, r2 to c2)) }
 
             // Deshacer swap si no hay combinación válida
             val tempBack = logicalGrid[r1][c1]
             logicalGrid[r1][c1] = logicalGrid[r2][c2]
             logicalGrid[r2][c2] = tempBack
             syncUI()
-            delay(250)
-            _uiState.update { it.copy(boardState = BoardState.IDLE) }
+            delay(240)
+            _uiState.update {
+                it.copy(
+                    boardState = BoardState.IDLE,
+                    invalidSwapCells = emptySet()
+                )
+            }
+            scheduleIdleHintTimer()
         } else {
             _uiState.update {
                 it.copy(
@@ -240,12 +438,23 @@ class GameViewModel(
         return emptySet()
     }
 
-    private fun expandWithPowerUps(seedCoords: Set<Pair<Int, Int>>): Pair<Set<Pair<Int, Int>>, Set<GamePiecePowerUp>> {
+    private data class ExpandedDestruction(
+        val finalCoords: Set<Pair<Int, Int>>,
+        val triggeredPowerUps: Set<GamePiecePowerUp>,
+        val shockwaveCenters: List<Pair<Int, Int>>,
+        val lineBlasterRows: Set<Int>,
+        val lineBlasterCols: Set<Int>
+    )
+
+    private fun expandWithPowerUps(seedCoords: Set<Pair<Int, Int>>): ExpandedDestruction {
         val finalDestructionSet = seedCoords.toMutableSet()
         val queue = ArrayDeque<Pair<Int, Int>>()
         queue.addAll(seedCoords)
         val processedPowerUps = mutableSetOf<Pair<Int, Int>>()
         val triggeredPowerUps = mutableSetOf<GamePiecePowerUp>()
+        val shockwaveCenters = mutableListOf<Pair<Int, Int>>()
+        val blasterRows = mutableSetOf<Int>()
+        val blasterCols = mutableSetOf<Int>()
 
         while (queue.isNotEmpty()) {
             val coord = queue.poll() ?: continue
@@ -253,9 +462,12 @@ class GameViewModel(
             if (!piece.isEmpty && piece.powerUp != GamePiecePowerUp.NONE && coord !in processedPowerUps) {
                 processedPowerUps.add(coord)
                 triggeredPowerUps.add(piece.powerUp)
+                shockwaveCenters.add(coord)
 
                 when (piece.powerUp) {
                     GamePiecePowerUp.LINE_BLASTER -> {
+                        blasterRows.add(coord.first)
+                        blasterCols.add(coord.second)
                         for (i in 0 until 8) {
                             if (finalDestructionSet.add(coord.first to i)) queue.add(coord.first to i)
                             if (finalDestructionSet.add(i to coord.second)) queue.add(i to coord.second)
@@ -286,7 +498,13 @@ class GameViewModel(
                 }
             }
         }
-        return finalDestructionSet to triggeredPowerUps
+        return ExpandedDestruction(
+            finalCoords = finalDestructionSet,
+            triggeredPowerUps = triggeredPowerUps,
+            shockwaveCenters = shockwaveCenters,
+            lineBlasterRows = blasterRows,
+            lineBlasterCols = blasterCols
+        )
     }
 
     private suspend fun resolveMatches(
@@ -296,20 +514,21 @@ class GameViewModel(
     ) {
         var matches = initialMatches
         var combo = 0
+        var totalMatchesThisTurn = 0
+        var totalPowerUpsThisTurn = 0
 
         while (matches.isNotEmpty()) {
             combo++
-            _uiState.update {
-                it.copy(
-                    boardState = BoardState.RESOLVING,
-                    lastMatchCombo = combo,
-                    cinthiaState = if (combo >= 2) CinthiaState.CHEERING else it.cinthiaState
-                )
-            }
+            totalMatchesThisTurn += matches.size
 
             val allMatchedCoords = matches.flatten().toSet()
-            val (finalDestructionSet, triggeredPowerUps) = expandWithPowerUps(allMatchedCoords)
+            val expansion = expandWithPowerUps(allMatchedCoords)
+            val finalDestructionSet = expansion.finalCoords
+            val triggeredPowerUps = expansion.triggeredPowerUps
             val powerUpTriggered = triggeredPowerUps.isNotEmpty() || isSpecialSwap
+            if (powerUpTriggered) {
+                totalPowerUpsThisTurn += maxOf(1, triggeredPowerUps.size)
+            }
 
             // Generar nuevos power-ups si hubo alineaciones de 4, 5 o L/T
             val powerUpsToSpawn = mutableListOf<Triple<Int, Int, GamePiecePowerUp>>()
@@ -321,45 +540,117 @@ class GameViewModel(
                 }
             }
 
-            // 1. Sonido de combinación (Match_Triple, Match_SuccessGem o Match_Combo)
             val hasBigMatch = powerUpsToSpawn.isNotEmpty() || matches.any { it.size >= 4 } || (isSpecialSwap && combo == 1)
-            when {
-                combo >= 2 -> _effects.emit(GameEffect.PlaySound(GameSound.MATCH_COMBO))
-                hasBigMatch -> _effects.emit(GameEffect.PlaySound(GameSound.MATCH_SUCCESS_GEM))
-                else -> _effects.emit(GameEffect.PlaySound(GameSound.MATCH_TRIPLE))
+            val comboPitch = SoundManager.computeComboPitch(combo)
+
+            // HIT-STOP (Micro-congelamiento de impacto de 55-75ms con destello blanco en impactos fuertes)
+            if (powerUpTriggered || hasBigMatch || combo >= 2) {
+                _uiState.update {
+                    it.copy(
+                        boardState = BoardState.RESOLVING,
+                        hitFlashCells = finalDestructionSet
+                    )
+                }
+                delay(if (powerUpTriggered || combo >= 3) 70L else 45L)
+                _uiState.update { it.copy(hitFlashCells = emptySet()) }
             }
 
-            // 2. Sonido de explosión de Bomba / Power-Up activado (Bomb_Explode o Bomb_ExplodeRed)
+            // 1. Sonido de combinación con Escalada de Tono (Pitch Escalation)
+            when {
+                combo >= 2 -> _effects.emit(GameEffect.PlaySound(GameSound.MATCH_COMBO, rate = comboPitch))
+                hasBigMatch -> _effects.emit(GameEffect.PlaySound(GameSound.MATCH_SUCCESS_GEM, rate = comboPitch))
+                else -> _effects.emit(GameEffect.PlaySound(GameSound.MATCH_TRIPLE, rate = comboPitch))
+            }
+
+            // 2. Sonido de explosión de Bomba / Power-Up activado
             if (GamePiecePowerUp.COLOR_BOMB in triggeredPowerUps || (isSpecialSwap && combo == 1)) {
                 _effects.emit(GameEffect.PlaySound(GameSound.BOMB_EXPLODE_RED))
             } else if (triggeredPowerUps.isNotEmpty()) {
                 _effects.emit(GameEffect.PlaySound(GameSound.BOMB_EXPLODE))
             }
 
-            // 3. Sonido de creación/carga de nuevo Power-Up (BombPower_Full o BombPower_Rise)
+            // 3. Sonido de creación/carga de nuevo Power-Up
             if (powerUpsToSpawn.isNotEmpty()) {
                 val spawnedTypes = powerUpsToSpawn.map { it.third }.toSet()
                 if (GamePiecePowerUp.COLOR_BOMB in spawnedTypes || GamePiecePowerUp.EXPLOSIVE_BOMB in spawnedTypes) {
-                    _effects.emit(GameEffect.PlaySound(GameSound.BOMB_POWER_FULL, delayMs = 80L))
+                    _effects.emit(GameEffect.PlaySound(GameSound.BOMB_POWER_FULL, delayMs = 70L))
                 } else if (GamePiecePowerUp.LINE_BLASTER in spawnedTypes) {
-                    _effects.emit(GameEffect.PlaySound(GameSound.BOMB_POWER_RISE, delayMs = 80L))
+                    _effects.emit(GameEffect.PlaySound(GameSound.BOMB_POWER_RISE, delayMs = 70L))
                 }
             }
 
-            // 4. Voz de celebración de Cinthia (Knight_Cheer_*) en combos o grandes explosiones
+            // 4. Voz de celebración de Cinthia y burbuja reactiva
+            val calloutLabel = computeComboCallout(combo, finalDestructionSet.size, powerUpTriggered)
             if (combo == 2 || (combo >= 4 && combo % 2 == 0) || (combo == 1 && powerUpTriggered)) {
-                _effects.emit(GameEffect.PlaySound(GameSound.KNIGHT_CHEER_COMBO, delayMs = 120L))
+                _effects.emit(GameEffect.PlaySound(GameSound.KNIGHT_CHEER_COMBO, delayMs = 110L))
             }
 
+            // 5. Haptics y Screen Shake escalados según la magnitud del impacto
             if (powerUpTriggered || combo > 1) {
-                _effects.emit(GameEffect.ComboHaptic)
+                _effects.emit(GameEffect.ComboHaptic(intensity = minOf(4, combo + (if (powerUpTriggered) 1 else 0))))
             } else {
                 _effects.emit(GameEffect.MatchHaptic)
             }
-            _effects.emit(GameEffect.ScreenShake)
 
+            val shakeIntensity = when {
+                GamePiecePowerUp.COLOR_BOMB in triggeredPowerUps || finalDestructionSet.size >= 12 -> 18f
+                powerUpTriggered || combo >= 3 -> 12f
+                combo == 2 || hasBigMatch -> 8f
+                else -> 4.5f
+            }
+            val shakeCycles = if (powerUpTriggered || combo >= 3) 6 else 4
+            _effects.emit(GameEffect.ScreenShake(intensityPx = shakeIntensity, cycles = shakeCycles))
+
+            // 6. Emitir explosión de partículas con los colores reales de cada gema y ondas de choque
+            val cellColorMap = finalDestructionSet.associateWith { (r, c) ->
+                val piece = logicalGrid[r][c]
+                if (piece.powerUp == GamePiecePowerUp.COLOR_BOMB) 0xFFFFD700L else piece.type.particleColorHex
+            }
+            _effects.emit(
+                GameEffect.SpawnParticles(
+                    ParticleBurstEvent(
+                        cellColors = cellColorMap,
+                        shockwaveCenters = expansion.shockwaveCenters,
+                        lineBlasterRows = expansion.lineBlasterRows,
+                        lineBlasterCols = expansion.lineBlasterCols,
+                        isColorBombMega = GamePiecePowerUp.COLOR_BOMB in triggeredPowerUps || (isSpecialSwap && combo == 1)
+                    )
+                )
+            )
+
+            // 7. Calcular puntos y lanzar Popup Flotante en el centroide del match
             val points = finalDestructionSet.size * 10 * combo
-            _uiState.update { it.copy(score = it.score + points, matchParticles = finalDestructionSet) }
+            val avgRow = finalDestructionSet.map { it.first }.average().toFloat()
+            val avgCol = finalDestructionSet.map { it.second }.average().toFloat()
+            val dominantColor = cellColorMap.values.firstOrNull() ?: 0xFFFFD700L
+
+            val popup = FloatingScorePopup(
+                row = avgRow.coerceIn(0.8f, 6.5f),
+                col = avgCol.coerceIn(1.0f, 6.0f),
+                pointsText = "+$points",
+                calloutText = calloutLabel,
+                colorHex = if (combo >= 2 || powerUpTriggered) 0xFFFFD700L else dominantColor,
+                scaleMultiplier = (1.0f + (combo - 1) * 0.14f + (if (powerUpTriggered) 0.2f else 0f)).coerceAtMost(1.65f)
+            )
+
+            _uiState.update { state ->
+                state.copy(
+                    boardState = BoardState.RESOLVING,
+                    score = state.score + points,
+                    lastMatchCombo = combo,
+                    matchParticles = finalDestructionSet,
+                    floatingPopups = (state.floatingPopups + popup).takeLast(5),
+                    cinthiaState = if (combo >= 2 || powerUpTriggered) CinthiaState.CHEERING else state.cinthiaState,
+                    cinthiaSpeech = calloutLabel ?: state.cinthiaSpeech
+                )
+            }
+
+            viewModelScope.launch {
+                delay(950)
+                _uiState.update { state ->
+                    state.copy(floatingPopups = state.floatingPopups.filterNot { it.id == popup.id })
+                }
+            }
 
             if (points >= 100) {
                 viewModelScope.launch {
@@ -367,7 +658,7 @@ class GameViewModel(
                 }
             }
 
-            delay(200)
+            delay(180)
             _uiState.update { it.copy(matchParticles = emptySet()) }
 
             val powerUpPositions = powerUpsToSpawn.map { it.first to it.second }.toSet()
@@ -392,11 +683,19 @@ class GameViewModel(
             _uiState.update { it.copy(boardState = BoardState.DROPPING) }
             applyGravity()
             syncUI()
-            // Sonido de caída / aterrizaje de gemas (Gem_Land01..03.WAV)
-            _effects.emit(GameEffect.PlaySound(GameSound.GEM_LAND, delayMs = 140L))
-            delay(300)
+            // Sonido de caída / aterrizaje de gemas
+            _effects.emit(GameEffect.PlaySound(GameSound.GEM_LAND, delayMs = 120L))
+            delay(270)
 
             matches = findMatches()
+        }
+
+        // Registrar telemetría de misiones diarias
+        viewModelScope.launch {
+            playerRepository.recordMatchTelemetry(
+                matchesMade = totalMatchesThisTurn,
+                powerUpsTriggered = totalPowerUpsThisTurn
+            )
         }
 
         if (!hasPossibleMoves()) {
@@ -404,18 +703,38 @@ class GameViewModel(
         }
 
         checkGameOver()
-        _uiState.update { state ->
-            val nextCinthiaState = when {
-                state.isGameWon -> CinthiaState.CHEERING
-                state.isGameOver -> CinthiaState.SAD
-                state.movesLeft <= 5 -> CinthiaState.WORRIED
-                else -> CinthiaState.IDLE
+
+        if (!_uiState.value.isGameOver && !_uiState.value.isGameWon) {
+            _uiState.update { state ->
+                val nextCinthiaState = when {
+                    state.movesLeft <= 5 -> CinthiaState.WORRIED
+                    else -> CinthiaState.IDLE
+                }
+                val nextSpeech = when {
+                    state.movesLeft == 1 -> "⚠️ ¡Último movimiento!"
+                    state.movesLeft in 2..3 && state.pointsNeededToWin <= 300 -> "🔥 ¡Faltan solo ${state.pointsNeededToWin} pts!"
+                    else -> null
+                }
+                state.copy(
+                    boardState = BoardState.IDLE,
+                    lastMatchCombo = 0,
+                    cinthiaState = nextCinthiaState,
+                    cinthiaSpeech = nextSpeech
+                )
             }
-            state.copy(
-                boardState = BoardState.IDLE,
-                lastMatchCombo = 0,
-                cinthiaState = nextCinthiaState
-            )
+            scheduleIdleHintTimer()
+        }
+    }
+
+    internal fun computeComboCallout(combo: Int, destroyedCount: Int, powerUpTriggered: Boolean): String? {
+        return when {
+            combo >= 5 || destroyedCount >= 16 -> "¡DIVINO! x$combo"
+            combo == 4 || destroyedCount >= 12 -> "¡ÉPICO! x$combo"
+            combo == 3 || (powerUpTriggered && destroyedCount >= 8) -> "¡INCREÍBLE!${if (combo >= 2) " x$combo" else ""}"
+            combo == 2 -> "¡COMBO x2!"
+            destroyedCount >= 5 -> "¡MAGNÍFICO!"
+            destroyedCount == 4 -> "¡GENIAL!"
+            else -> null
         }
     }
 
@@ -522,42 +841,67 @@ class GameViewModel(
     }
 
     private fun hasPossibleMoves(): Boolean {
+        return findBestHintMove() != null
+    }
+
+    /**
+     * Busca la mejor jugada disponible en el tablero para el sistema de Pistas Automáticas (Idle Hints),
+     * priorizando combinaciones de 4+, combinaciones de Power-Ups o uso de Color Bomb.
+     */
+    internal fun findBestHintMove(): Pair<Pair<Int, Int>, Pair<Int, Int>>? {
+        var bestMove: Pair<Pair<Int, Int>, Pair<Int, Int>>? = null
+        var bestWeight = 0
+
         for (r in 0 until 8) {
             for (c in 0 until 8) {
-                val piece = logicalGrid[r][c]
-                if (!piece.isEmpty && piece.powerUp == GamePiecePowerUp.COLOR_BOMB) {
-                    return true
-                }
-                if (c + 1 < 8) {
-                    if (checkSwapForMatch(r, c, r, c + 1)) return true
-                }
-                if (r + 1 < 8) {
-                    if (checkSwapForMatch(r, c, r + 1, c)) return true
+                val neighbors = listOfNotNull(
+                    if (c + 1 < 8) r to (c + 1) else null,
+                    if (r + 1 < 8) (r + 1) to c else null
+                )
+                for ((nr, nc) in neighbors) {
+                    val weight = evaluateSwapWeight(r, c, nr, nc)
+                    if (weight > bestWeight) {
+                        bestWeight = weight
+                        bestMove = (r to c) to (nr to nc)
+                    }
                 }
             }
         }
-        return false
+        return bestMove
     }
 
-    private fun checkSwapForMatch(r1: Int, c1: Int, r2: Int, c2: Int): Boolean {
+    private fun evaluateSwapWeight(r1: Int, c1: Int, r2: Int, c2: Int): Int {
         val p1 = logicalGrid[r1][c1]
         val p2 = logicalGrid[r2][c2]
-        if (p1.powerUp != GamePiecePowerUp.NONE && p2.powerUp != GamePiecePowerUp.NONE) return true
+        if (p1.isEmpty || p2.isEmpty) return 0
+
+        if (p1.powerUp == GamePiecePowerUp.COLOR_BOMB || p2.powerUp == GamePiecePowerUp.COLOR_BOMB) {
+            return 100
+        }
+        if (p1.powerUp != GamePiecePowerUp.NONE && p2.powerUp != GamePiecePowerUp.NONE) {
+            return 90
+        }
 
         logicalGrid[r1][c1] = p2
         logicalGrid[r2][c2] = p1
 
-        val hasMatch = findMatches().isNotEmpty()
+        val matches = findMatches()
+        val totalMatched = matches.sumOf { it.size }
 
         logicalGrid[r1][c1] = p1
         logicalGrid[r2][c2] = p2
 
-        return hasMatch
+        return totalMatched
     }
 
     private suspend fun shuffleBoard() {
-        _uiState.update { it.copy(boardState = BoardState.SHUFFLING) }
-        delay(500)
+        _uiState.update {
+            it.copy(
+                boardState = BoardState.SHUFFLING,
+                cinthiaSpeech = "🔄 ¡Barajando gemas!"
+            )
+        }
+        delay(450)
 
         do {
             val pieces = logicalGrid.flatten().shuffled().toMutableList()
@@ -572,17 +916,62 @@ class GameViewModel(
         _effects.emit(GameEffect.PlaySound(GameSound.GEM_LAND))
     }
 
-    private fun checkGameOver() {
+    private suspend fun checkGameOver() {
         val currentState = _uiState.value
         if (currentState.score >= currentState.targetScore && !currentState.isGameWon) {
-            val target = currentState.targetScore
-            val score = currentState.score
+            idleHintJob?.cancel()
+
+            // BONUS FINALE: Convertir movimientos restantes en puntos extra con celebración jugosa
+            var bonusScore = 0
+            val movesToConvert = _uiState.value.movesLeft
+            if (movesToConvert > 0) {
+                _uiState.update {
+                    it.copy(
+                        boardState = BoardState.BONUS_FINALE,
+                        cinthiaState = CinthiaState.CHEERING,
+                        cinthiaSpeech = "🎉 ¡BONUS DE MOVIMIENTOS!"
+                    )
+                }
+                for (step in 1..movesToConvert) {
+                    val stepPoints = 60
+                    bonusScore += stepPoints
+                    val pitch = (1.0f + step * 0.06f).coerceIn(1.0f, 1.85f)
+                    _effects.emit(GameEffect.PlaySound(GameSound.MATCH_SUCCESS_GEM, rate = pitch, volume = 0.75f))
+                    _effects.emit(GameEffect.SwipeHaptic)
+
+                    val randomRow = (1..6).random()
+                    val randomCol = (1..6).random()
+                    val popup = FloatingScorePopup(
+                        row = randomRow.toFloat(),
+                        col = randomCol.toFloat(),
+                        pointsText = "+$stepPoints",
+                        calloutText = if (step == 1) "¡BONUS!" else null,
+                        colorHex = 0xFFFFD700L,
+                        scaleMultiplier = 1.15f
+                    )
+                    _uiState.update { st ->
+                        st.copy(
+                            movesLeft = maxOf(0, st.movesLeft - 1),
+                            score = st.score + stepPoints,
+                            bonusMovesScore = bonusScore,
+                            floatingPopups = (st.floatingPopups + popup).takeLast(5)
+                        )
+                    }
+                    delay(110L)
+                }
+                delay(280L)
+            }
+
+            val finalState = _uiState.value
+            val target = finalState.targetScore
+            val score = finalState.score
             val stars = when {
                 score >= (target * 1.8).toInt() -> 3
                 score >= (target * 1.4).toInt() -> 2
                 else -> 1
             }
-            val coinReward = 50 + stars * 25
+            val streakBonusCoins = minOf(75, (finalState.winStreak + 1) * 15)
+            val coinReward = 50 + stars * 25 + streakBonusCoins
 
             viewModelScope.launch {
                 playerRepository.completeLevelAndUnlockNext(safeLevel, stars)
@@ -595,9 +984,11 @@ class GameViewModel(
                     isGameOver = true,
                     boardState = BoardState.IDLE,
                     cinthiaState = CinthiaState.CHEERING,
+                    cinthiaSpeech = "👑 ¡Victoria Real!",
                     earnedStars = stars,
                     earnedCoinsReward = coinReward,
-                    doubleCoinsClaimed = false
+                    doubleCoinsClaimed = false,
+                    winStreak = it.winStreak + 1
                 )
             }
 
@@ -614,13 +1005,15 @@ class GameViewModel(
                 _effects.emit(GameEffect.PlaySound(awardSound, delayMs = 950L))
             }
         } else if (currentState.movesLeft <= 0 && !currentState.isGameOver) {
+            idleHintJob?.cancel()
             _uiState.update {
                 it.copy(
                     isGameOver = true,
-                    cinthiaState = CinthiaState.SAD
+                    cinthiaState = CinthiaState.SAD,
+                    cinthiaSpeech = "💔 ¡Estuvimos tan cerca!"
                 )
             }
-            // Secuencia de sonidos de Derrota y Público (Game_Lost.WAV + Crowd_Defeat.WAV)
+            // Secuencia de sonidos de Derrota y Público
             viewModelScope.launch {
                 _effects.emit(GameEffect.PlaySound(GameSound.GAME_LOST))
                 _effects.emit(GameEffect.PlaySound(GameSound.CROWD_DEFEAT, delayMs = 300L))
@@ -658,12 +1051,80 @@ class GameViewModel(
             it.copy(
                 movesLeft = it.movesLeft + count,
                 isGameOver = false,
-                cinthiaState = CinthiaState.IDLE
+                cinthiaState = CinthiaState.CHEERING,
+                cinthiaSpeech = "💪 ¡+$count movimientos extra!"
             )
         }
         viewModelScope.launch {
             _effects.emit(GameEffect.PlaySound(GameSound.KNIGHT_CHEER_KEEP_GOING))
+            scheduleIdleHintTimer()
         }
+    }
+
+    /**
+     * Permite continuar con +5 movimientos usando monedas (80 🪙) cuando el jugador está en zona Near-Miss
+     * y quiere salvar su Racha de Victorias.
+     */
+    fun continueWithCoins(cost: Int = 80, extraMoves: Int = 5) {
+        viewModelScope.launch {
+            val spent = playerRepository.spendCoins(cost)
+            if (spent) {
+                addRewardMoves(extraMoves)
+            } else {
+                _effects.emit(GameEffect.PlaySound(GameSound.TILE_INVALID))
+            }
+        }
+    }
+
+    /**
+     * Reinicia el nivel actual al instante sin obligar al jugador a volver al Mapa de Mundos.
+     */
+    fun retryLevel() {
+        idleHintJob?.cancel()
+        viewModelScope.launch {
+            playerRepository.resetWinStreak()
+            val levelConfig = WorldRepository.getLevelConfig(safeLevel)
+            initializeBoard()
+            _uiState.update {
+                it.copy(
+                    score = 0,
+                    movesLeft = levelConfig.moves,
+                    boardState = BoardState.IDLE,
+                    isGameOver = false,
+                    isGameWon = false,
+                    cinthiaState = CinthiaState.IDLE,
+                    cinthiaSpeech = "⚔️ ¡Nuevo intento!",
+                    lastMatchCombo = 0,
+                    matchParticles = emptySet(),
+                    hitFlashCells = emptySet(),
+                    selectedCell = null,
+                    hintCells = emptySet(),
+                    invalidSwapCells = emptySet(),
+                    floatingPopups = emptyList(),
+                    activeBooster = null,
+                    earnedStars = 0,
+                    earnedCoinsReward = 0,
+                    bonusMovesScore = 0,
+                    doubleCoinsClaimed = false,
+                    winStreak = 0,
+                    streakStarterCount = 0
+                )
+            }
+            _effects.emit(GameEffect.PlaySound(GameSound.GEM_LAND))
+            scheduleIdleHintTimer()
+        }
+    }
+
+    fun toggleSound(enabled: Boolean) {
+        viewModelScope.launch { playerRepository.setSoundEnabled(enabled) }
+    }
+
+    fun toggleHaptics(enabled: Boolean) {
+        viewModelScope.launch { playerRepository.setHapticsEnabled(enabled) }
+    }
+
+    fun toggleReducedMotion(enabled: Boolean) {
+        viewModelScope.launch { playerRepository.setReducedMotion(enabled) }
     }
 
     fun cancelActiveBooster() {
@@ -676,6 +1137,7 @@ class GameViewModel(
             }
             viewModelScope.launch {
                 _effects.emit(GameEffect.PlaySound(GameSound.TILE_DESELECT))
+                scheduleIdleHintTimer()
             }
         }
     }
@@ -684,6 +1146,7 @@ class GameViewModel(
         if (_uiState.value.boardState != BoardState.IDLE && _uiState.value.boardState != BoardState.WAITING_FOR_BOOSTER_TARGET) return
         if (_uiState.value.isGameOver) return
 
+        clearInteractionOverlays()
         val currentState = _uiState.value
         if (currentState.activeBooster == type) {
             cancelActiveBooster()
@@ -702,6 +1165,7 @@ class GameViewModel(
                         resolveMatches(matches)
                     } else {
                         _uiState.update { it.copy(boardState = BoardState.IDLE) }
+                        scheduleIdleHintTimer()
                     }
                 }
             } else {
@@ -718,40 +1182,93 @@ class GameViewModel(
         } else {
             viewModelScope.launch {
                 _effects.emit(GameEffect.PlaySound(GameSound.TILE_INVALID))
+                _effects.emit(GameEffect.InvalidMoveHaptic)
             }
         }
     }
 
+    /**
+     * Soporta tanto el uso de Boosters como el control Tap-to-Select / Tap-to-Swap
+     * para maximizar la precisión y responsividad táctil (Real-Time Control de Steve Swink).
+     */
     fun onPieceTapped(row: Int, col: Int) {
         val state = _uiState.value
         if (state.isGameWon || state.isGameOver) return
-        if (state.boardState != BoardState.WAITING_FOR_BOOSTER_TARGET || state.activeBooster == null) return
 
-        viewModelScope.launch {
-            val booster = state.activeBooster
-            _effects.emit(GameEffect.PlaySound(GameSound.TILE_SELECT))
-            _uiState.update { it.copy(activeBooster = null, boardState = BoardState.RESOLVING) }
+        // Caso 1: Aplicar Booster activo sobre la celda tocada
+        if (state.boardState == BoardState.WAITING_FOR_BOOSTER_TARGET && state.activeBooster != null) {
+            viewModelScope.launch {
+                val booster = state.activeBooster
+                _effects.emit(GameEffect.PlaySound(GameSound.TILE_SELECT))
+                _uiState.update { it.copy(activeBooster = null, boardState = BoardState.RESOLVING) }
 
-            val affected = mutableSetOf<Pair<Int, Int>>()
-            when (booster) {
-                BoosterType.HAMMER -> {
-                    affected.add(row to col)
-                }
-                BoosterType.DYNAMITE -> {
-                    for (r in (row - 1)..(row + 1)) {
-                        for (c in (col - 1)..(col + 1)) {
-                            if (r in 0..7 && c in 0..7) affected.add(r to c)
+                val affected = mutableSetOf<Pair<Int, Int>>()
+                when (booster) {
+                    BoosterType.HAMMER -> {
+                        affected.add(row to col)
+                    }
+                    BoosterType.DYNAMITE -> {
+                        for (r in (row - 1)..(row + 1)) {
+                            for (c in (col - 1)..(col + 1)) {
+                                if (r in 0..7 && c in 0..7) affected.add(r to c)
+                            }
                         }
                     }
+                    else -> {}
                 }
-                else -> {}
-            }
 
-            if (affected.isNotEmpty()) {
-                playerRepository.updateBoosterCount(booster, -1)
-                destroyPieces(affected, boosterUsed = booster)
+                if (affected.isNotEmpty()) {
+                    playerRepository.updateBoosterCount(booster, -1)
+                    destroyPieces(affected, boosterUsed = booster)
+                } else {
+                    _uiState.update { it.copy(boardState = BoardState.IDLE) }
+                    scheduleIdleHintTimer()
+                }
+            }
+            return
+        }
+
+        // Caso 2: Tap-to-Select y Tap-to-Swap en estado IDLE
+        if (state.boardState == BoardState.IDLE) {
+            val currentSelected = state.selectedCell
+            if (currentSelected == null) {
+                _uiState.update {
+                    it.copy(
+                        selectedCell = row to col,
+                        hintCells = emptySet()
+                    )
+                }
+                viewModelScope.launch {
+                    _effects.emit(GameEffect.PlaySound(GameSound.TILE_SELECT))
+                    _effects.emit(GameEffect.SwipeHaptic)
+                }
+                scheduleIdleHintTimer()
+            } else if (currentSelected == (row to col)) {
+                _uiState.update { it.copy(selectedCell = null) }
+                viewModelScope.launch {
+                    _effects.emit(GameEffect.PlaySound(GameSound.TILE_DESELECT))
+                }
+                scheduleIdleHintTimer()
             } else {
-                _uiState.update { it.copy(boardState = BoardState.IDLE) }
+                val manhattan = abs(currentSelected.first - row) + abs(currentSelected.second - col)
+                if (manhattan == 1) {
+                    clearInteractionOverlays()
+                    viewModelScope.launch {
+                        processMove(currentSelected.first, currentSelected.second, row, col)
+                    }
+                } else {
+                    _uiState.update {
+                        it.copy(
+                            selectedCell = row to col,
+                            hintCells = emptySet()
+                        )
+                    }
+                    viewModelScope.launch {
+                        _effects.emit(GameEffect.PlaySound(GameSound.TILE_SELECT))
+                        _effects.emit(GameEffect.SwipeHaptic)
+                    }
+                    scheduleIdleHintTimer()
+                }
             }
         }
     }
@@ -760,8 +1277,15 @@ class GameViewModel(
         coords: Set<Pair<Int, Int>>,
         boosterUsed: BoosterType? = null
     ) {
-        val (finalDestructionSet, triggeredPowerUps) = expandWithPowerUps(coords)
+        val expansion = expandWithPowerUps(coords)
+        val finalDestructionSet = expansion.finalCoords
+        val triggeredPowerUps = expansion.triggeredPowerUps
         val powerUpTriggered = triggeredPowerUps.isNotEmpty()
+
+        // Hit-Stop y Flash de impacto en uso de Booster
+        _uiState.update { it.copy(hitFlashCells = finalDestructionSet) }
+        delay(65L)
+        _uiState.update { it.copy(hitFlashCells = emptySet()) }
 
         when (boosterUsed) {
             BoosterType.HAMMER -> {
@@ -788,19 +1312,61 @@ class GameViewModel(
             }
         }
 
-        if (powerUpTriggered) {
-            _effects.emit(GameEffect.ComboHaptic)
+        if (powerUpTriggered || boosterUsed == BoosterType.DYNAMITE) {
+            _effects.emit(GameEffect.ComboHaptic(intensity = 3))
         } else {
             _effects.emit(GameEffect.MatchHaptic)
         }
-        _effects.emit(GameEffect.ScreenShake)
+        _effects.emit(
+            GameEffect.ScreenShake(
+                intensityPx = if (boosterUsed == BoosterType.DYNAMITE || powerUpTriggered) 15f else 9f,
+                cycles = 5
+            )
+        )
+
+        val cellColorMap = finalDestructionSet.associateWith { (r, c) ->
+            logicalGrid[r][c].type.particleColorHex
+        }
+        _effects.emit(
+            GameEffect.SpawnParticles(
+                ParticleBurstEvent(
+                    cellColors = cellColorMap,
+                    shockwaveCenters = expansion.shockwaveCenters + listOfNotNull(coords.firstOrNull()),
+                    lineBlasterRows = expansion.lineBlasterRows,
+                    lineBlasterCols = expansion.lineBlasterCols
+                )
+            )
+        )
 
         val points = finalDestructionSet.size * 15
+        val center = coords.firstOrNull() ?: (3 to 3)
+        val popup = FloatingScorePopup(
+            row = center.first.toFloat(),
+            col = center.second.toFloat(),
+            pointsText = "+$points",
+            calloutText = if (boosterUsed == BoosterType.DYNAMITE) "💥 ¡BOOM!" else "🔨 ¡GOLPE!",
+            colorHex = 0xFFFFD700L,
+            scaleMultiplier = 1.25f
+        )
+
         _uiState.update {
             it.copy(
                 score = it.score + points,
-                matchParticles = finalDestructionSet
+                matchParticles = finalDestructionSet,
+                floatingPopups = (it.floatingPopups + popup).takeLast(5),
+                cinthiaState = CinthiaState.CHEERING
             )
+        }
+
+        viewModelScope.launch {
+            delay(950)
+            _uiState.update { state ->
+                state.copy(floatingPopups = state.floatingPopups.filterNot { it.id == popup.id })
+            }
+        }
+
+        viewModelScope.launch {
+            playerRepository.recordMatchTelemetry(matchesMade = 1, powerUpsTriggered = 1)
         }
 
         if (points >= 100) {
@@ -809,7 +1375,7 @@ class GameViewModel(
             }
         }
 
-        delay(200)
+        delay(180)
         _uiState.update { it.copy(matchParticles = emptySet()) }
 
         for (coord in finalDestructionSet) {
@@ -823,8 +1389,8 @@ class GameViewModel(
         _uiState.update { it.copy(boardState = BoardState.DROPPING) }
         applyGravity()
         syncUI()
-        _effects.emit(GameEffect.PlaySound(GameSound.GEM_LAND, delayMs = 140L))
-        delay(300)
+        _effects.emit(GameEffect.PlaySound(GameSound.GEM_LAND, delayMs = 120L))
+        delay(270)
 
         val matches = findMatches()
         if (matches.isNotEmpty()) {
@@ -834,8 +1400,15 @@ class GameViewModel(
                 shuffleBoard()
             }
             checkGameOver()
-            _uiState.update { it.copy(boardState = BoardState.IDLE) }
+            if (!_uiState.value.isGameOver && !_uiState.value.isGameWon) {
+                _uiState.update { it.copy(boardState = BoardState.IDLE) }
+                scheduleIdleHintTimer()
+            }
         }
+    }
+
+    companion object {
+        private const val IDLE_HINT_DELAY_MS = 4500L
     }
 
     class Factory(

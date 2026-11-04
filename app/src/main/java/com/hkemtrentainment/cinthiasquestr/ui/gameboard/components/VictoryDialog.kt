@@ -1,5 +1,11 @@
 package com.hkemtrentainment.cinthiasquestr.ui.gameboard.components
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateIntAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -21,43 +27,78 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import kotlinx.coroutines.delay
 
 @Composable
 fun VictoryDialog(
     score: Int,
     stars: Int = 1,
     earnedCoins: Int = 75,
+    bonusMovesScore: Int = 0,
+    winStreak: Int = 1,
     doubleCoinsClaimed: Boolean = false,
     hasNextLevel: Boolean = true,
     onWatchAdClick: () -> Unit,
     onNextLevelClick: () -> Unit,
     onWorldMapClick: () -> Unit
 ) {
+    // Aparición secuencial con rebote elástico para cada una de las 3 estrellas
+    val starScales = remember { List(3) { Animatable(0f) } }
+    LaunchedEffect(stars) {
+        starScales.forEachIndexed { idx, anim ->
+            delay(idx * 190L)
+            anim.animateTo(
+                targetValue = if (idx < stars) 1f else 0.85f,
+                animationSpec = spring(
+                    dampingRatio = Spring.DampingRatioLowBouncy,
+                    stiffness = Spring.StiffnessMediumLow
+                )
+            )
+        }
+    }
+
+    val animatedScore by animateIntAsState(
+        targetValue = score,
+        animationSpec = tween(durationMillis = 700, easing = FastOutSlowInEasing),
+        label = "victoryScore"
+    )
+    val totalDisplayedCoins = if (doubleCoinsClaimed) earnedCoins * 2 else earnedCoins
+    val animatedCoins by animateIntAsState(
+        targetValue = totalDisplayedCoins,
+        animationSpec = tween(durationMillis = 550, easing = FastOutSlowInEasing),
+        label = "victoryCoins"
+    )
+
     Dialog(
         onDismissRequest = { },
         properties = DialogProperties(dismissOnBackPress = false, dismissOnClickOutside = false)
     ) {
         Surface(
-            shape = RoundedCornerShape(20.dp),
+            shape = RoundedCornerShape(22.dp),
             color = Color(0xFFF5E6CE),
             border = BorderStroke(4.dp, Color(0xFF3E2723)),
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp)
+                .padding(14.dp)
         ) {
             Column(
-                modifier = Modifier.padding(24.dp),
+                modifier = Modifier.padding(22.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(14.dp)
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Text(
                     text = if (hasNextLevel) "¡Nivel Completado!" else "¡Aventura Completada!",
@@ -75,18 +116,38 @@ fun VictoryDialog(
                 ) {
                     repeat(3) { index ->
                         val isStarEarned = index < stars
-                        val size = if (index == 1) 48.dp else 38.dp
+                        val size = if (index == 1) 52.dp else 40.dp
                         Icon(
                             imageVector = if (isStarEarned) Icons.Filled.Star else Icons.Outlined.Star,
                             contentDescription = null,
                             tint = if (isStarEarned) Color(0xFFFFD700) else Color(0xFFB0BEC5),
-                            modifier = Modifier.size(size)
+                            modifier = Modifier
+                                .size(size)
+                                .scale(starScales[index].value)
+                        )
+                    }
+                }
+
+                if (winStreak >= 1) {
+                    Surface(
+                        color = Color(0xFF3E2723),
+                        shape = RoundedCornerShape(14.dp),
+                        border = BorderStroke(1.5.dp, Color(0xFFFFD700))
+                    ) {
+                        val nextPowerUps = winStreak.coerceIn(1, 3)
+                        Text(
+                            text = "🔥 Racha de Victorias x$winStreak · +$nextPowerUps Power-Up${if (nextPowerUps > 1) "s" else ""} en el próximo nivel",
+                            color = Color(0xFFFFD700),
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
                         )
                     }
                 }
 
                 Text(
-                    text = "Puntuación Final: $score",
+                    text = "Puntuación Final: $animatedScore",
                     style = MaterialTheme.typography.titleLarge.copy(
                         fontFamily = FontFamily.Serif,
                         color = Color(0xFF5D4037),
@@ -95,9 +156,18 @@ fun VictoryDialog(
                     textAlign = TextAlign.Center
                 )
 
-                val totalDisplayedCoins = if (doubleCoinsClaimed) earnedCoins * 2 else earnedCoins
+                if (bonusMovesScore > 0) {
+                    Text(
+                        text = "(Incluye +$bonusMovesScore pts de Bonus por Movimientos)",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color(0xFF6D4C41),
+                        textAlign = TextAlign.Center
+                    )
+                }
+
                 Text(
-                    text = "Recompensa: +$totalDisplayedCoins 🪙",
+                    text = "Recompensa: +$animatedCoins 🪙",
                     style = MaterialTheme.typography.bodyLarge.copy(
                         fontFamily = FontFamily.Serif,
                         color = Color(0xFF2E7D32),
@@ -139,7 +209,7 @@ fun VictoryDialog(
                         Text(
                             text = "SIGUIENTE NIVEL ➔",
                             fontFamily = FontFamily.Serif,
-                            fontWeight = FontWeight.Bold
+                            fontWeight = FontWeight.ExtraBold
                         )
                     }
                 }

@@ -30,15 +30,18 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.hkemtrentainment.cinthiasquestr.CinthiasQuestApp
+import com.hkemtrentainment.cinthiasquestr.audio.GameSound
 import com.hkemtrentainment.cinthiasquestr.data.WorldConfig
 import com.hkemtrentainment.cinthiasquestr.data.WorldRepository
 import com.hkemtrentainment.cinthiasquestr.ui.worldmap.components.LevelDetailDialog
@@ -59,6 +62,10 @@ fun WorldMapScreen(
     val scrollState = rememberScrollState()
     val coroutineScope = rememberCoroutineScope()
     val context = LocalContext.current
+    val soundManager = remember(context) {
+        (context.applicationContext as CinthiasQuestApp).soundManager
+    }
+    val haptic = LocalHapticFeedback.current
 
     // Y offsets for each world section header within the scrollable Column
     val worldYOffsets = remember { mutableStateMapOf<Int, Int>() }
@@ -68,11 +75,17 @@ fun WorldMapScreen(
         LevelDetailDialog(
             levelNumber = levelNum,
             starsEarned = uiState.levelStars[levelNum] ?: 0,
+            winStreak = uiState.winStreak,
             onPlayClick = { selected ->
+                soundManager.play(GameSound.MATCH_SUCCESS_GEM)
+                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                 viewModel.dismissDetailDialog()
                 onLevelSelect(selected)
             },
-            onDismiss = { viewModel.dismissDetailDialog() }
+            onDismiss = {
+                soundManager.play(GameSound.TILE_DESELECT)
+                viewModel.dismissDetailDialog()
+            }
         )
     }
 
@@ -81,7 +94,11 @@ fun WorldMapScreen(
             WorldMapTopBar(
                 coins = uiState.coins,
                 totalStars = uiState.totalStars,
-                onBackClick = onBackClick
+                winStreak = uiState.winStreak,
+                onBackClick = {
+                    soundManager.play(GameSound.TILE_DESELECT)
+                    onBackClick()
+                }
             )
         }
     ) { innerPadding ->
@@ -103,6 +120,8 @@ fun WorldMapScreen(
             WorldTabsRow(
                 selectedWorld = uiState.selectedWorld,
                 onWorldSelect = { world ->
+                    soundManager.play(GameSound.TILE_SELECT)
+                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                     viewModel.selectWorld(world)
                     // Smooth scroll to selected world position
                     worldYOffsets[world.id]?.let { yPos ->
@@ -174,8 +193,11 @@ fun WorldMapScreen(
                                         worldColor = world.primaryColor,
                                         onClick = {
                                             if (isUnlocked) {
+                                                soundManager.play(GameSound.TILE_SELECT)
+                                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                                 viewModel.onLevelClicked(levelNum)
                                             } else {
+                                                soundManager.play(GameSound.TILE_INVALID)
                                                 Toast.makeText(
                                                     context,
                                                     "¡Completa el Nivel ${uiState.maxUnlockedLevel} para desbloquear el Nivel $levelNum!",
@@ -202,6 +224,7 @@ fun WorldMapScreen(
 fun WorldMapTopBar(
     coins: Int,
     totalStars: Int,
+    winStreak: Int = 0,
     onBackClick: () -> Unit
 ) {
     Surface(
@@ -228,7 +251,7 @@ fun WorldMapTopBar(
 
             Text(
                 text = "Cinthia's Quest",
-                style = MaterialTheme.typography.titleLarge,
+                style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
                 color = Color(0xFFFFD700),
                 fontFamily = FontFamily.Serif
@@ -236,8 +259,29 @@ fun WorldMapTopBar(
 
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
+                // Win Streak Chip
+                if (winStreak > 0) {
+                    Surface(
+                        color = Color(0xFF2C1A14),
+                        shape = RoundedCornerShape(16.dp),
+                        border = BorderStroke(1.dp, Color(0xFFFF7043))
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "🔥$winStreak",
+                                color = Color(0xFFFFCC80),
+                                fontWeight = FontWeight.ExtraBold,
+                                fontSize = 13.sp
+                            )
+                        }
+                    }
+                }
+
                 // Cloud Sync Chip
                 Surface(
                     color = Color(0xFF2C1A14),
@@ -245,12 +289,12 @@ fun WorldMapTopBar(
                     border = BorderStroke(1.dp, Color(0xFF81D4FA))
                 ) {
                     Row(
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 4.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
                             text = "☁️",
-                            fontSize = 13.sp
+                            fontSize = 12.sp
                         )
                     }
                 }
@@ -262,21 +306,21 @@ fun WorldMapTopBar(
                     border = BorderStroke(1.dp, Color(0xFFFFD700))
                 ) {
                     Row(
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(
                             imageVector = Icons.Default.Star,
                             contentDescription = null,
                             tint = Color(0xFFFFD700),
-                            modifier = Modifier.size(18.dp)
+                            modifier = Modifier.size(16.dp)
                         )
-                        Spacer(modifier = Modifier.width(4.dp))
+                        Spacer(modifier = Modifier.width(3.dp))
                         Text(
                             text = "$totalStars",
                             color = Color.White,
                             fontWeight = FontWeight.Bold,
-                            fontSize = 14.sp
+                            fontSize = 13.sp
                         )
                     }
                 }
@@ -288,19 +332,19 @@ fun WorldMapTopBar(
                     border = BorderStroke(1.dp, Color(0xFFFFB300))
                 ) {
                     Row(
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
                             text = "🪙",
-                            fontSize = 14.sp
+                            fontSize = 13.sp
                         )
-                        Spacer(modifier = Modifier.width(4.dp))
+                        Spacer(modifier = Modifier.width(3.dp))
                         Text(
                             text = "$coins",
                             color = Color.White,
                             fontWeight = FontWeight.Bold,
-                            fontSize = 14.sp
+                            fontSize = 13.sp
                         )
                     }
                 }

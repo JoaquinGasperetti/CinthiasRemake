@@ -1,7 +1,9 @@
 package com.hkemtrentainment.cinthiasquestr.ui.mainmenu
 
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateIntAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -28,6 +30,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -39,6 +42,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import com.hkemtrentainment.cinthiasquestr.data.PlayerData
+import com.hkemtrentainment.cinthiasquestr.data.PlayerRepository
 import com.hkemtrentainment.cinthiasquestr.ui.gameboard.BoosterType
 
 @Composable
@@ -49,6 +53,13 @@ fun ShopDialog(
     onClaimBonusCoins: () -> Unit,
     onDismiss: () -> Unit
 ) {
+    val animatedCoins by animateIntAsState(
+        targetValue = playerData.coins,
+        animationSpec = tween(400, easing = FastOutSlowInEasing),
+        label = "shopCoins"
+    )
+    val streakReward = PlayerRepository.computeDailyStreakReward(playerData.dailyLoginStreak)
+
     Dialog(onDismissRequest = onDismiss) {
         Card(
             modifier = Modifier
@@ -92,7 +103,7 @@ fun ShopDialog(
                     shape = RoundedCornerShape(16.dp)
                 ) {
                     Text(
-                        text = "Saldo actual: 🪙 ${playerData.coins}",
+                        text = "Saldo actual: 🪙 $animatedCoins",
                         color = Color(0xFFFFD700),
                         fontWeight = FontWeight.Bold,
                         fontSize = 15.sp,
@@ -149,7 +160,7 @@ fun ShopDialog(
                     colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF3E2723))
                 ) {
                     Text(
-                        text = "Cofre Diario Gratis (+250 🪙)",
+                        text = "🎁 Cofre Racha Diaria Día ${playerData.dailyLoginStreak} (+$streakReward 🪙)",
                         fontWeight = FontWeight.Bold
                     )
                 }

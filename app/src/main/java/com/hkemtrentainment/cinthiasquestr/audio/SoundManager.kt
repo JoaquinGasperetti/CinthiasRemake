@@ -133,7 +133,7 @@ class SoundManager(context: Context) {
             .build()
 
         soundPool = SoundPool.Builder()
-            .setMaxStreams(10)
+            .setMaxStreams(12)
             .setAudioAttributes(audioAttributes)
             .build()
 
@@ -198,6 +198,10 @@ class SoundManager(context: Context) {
         return null
     }
 
+    /**
+     * Reproduce un sonido de juego con soporte de Pitch Escalation (rate) y micro-variación
+     * orgánica para evitar fatiga auditiva en acciones repetitivas (Game Feel / Juice).
+     */
     fun play(sound: GameSound, volume: Float = 1.0f, rate: Float = 1.0f) {
         if (!isSoundEnabled) return
 
@@ -228,7 +232,16 @@ class SoundManager(context: Context) {
             GameSound.AWARD_GOLD -> SoundAsset.AWARD_GOLD
         }
 
-        playAsset(asset, volume.coerceIn(0f, 1f), rate.coerceIn(0.5f, 2.0f))
+        // Si el llamador dejó rate = 1.0f en sonidos frecuentes como caída de gemas o selección,
+        // aplicamos una sutil variación de ±3% para dar textura orgánica al audio.
+        val organicJitter = if (rate == 1.0f && (sound == GameSound.GEM_LAND || sound == GameSound.TILE_SELECT)) {
+            Random.nextFloat() * 0.06f - 0.03f
+        } else {
+            0f
+        }
+
+        val finalRate = (rate + organicJitter).coerceIn(0.5f, 2.0f)
+        playAsset(asset, volume.coerceIn(0f, 1f), finalRate)
     }
 
     fun playAsset(asset: SoundAsset, volume: Float = 1.0f, rate: Float = 1.0f) {
@@ -295,5 +308,14 @@ class SoundManager(context: Context) {
 
     companion object {
         private const val TAG = "SoundManager"
+
+        /**
+         * Calcula el multiplicador de tono (pitch) ascendente según el nivel de combo en cascada.
+         * Escala semitonalmente desde 1.0x hasta 1.75x para generar dopamina auditiva en reacciones en cadena.
+         */
+        fun computeComboPitch(combo: Int): Float {
+            if (combo <= 1) return 1.0f
+            return (1.0f + (combo - 1) * 0.085f).coerceIn(1.0f, 1.75f)
+        }
     }
 }
