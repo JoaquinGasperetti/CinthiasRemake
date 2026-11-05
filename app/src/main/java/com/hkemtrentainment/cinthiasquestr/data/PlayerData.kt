@@ -18,6 +18,17 @@ data class DailyQuest(
         get() = if (targetProgress > 0) (currentProgress.toFloat() / targetProgress).coerceIn(0f, 1f) else 0f
 }
 
+/**
+ * Rango de Caballera (Meta-progresión por estrellas acumuladas).
+ */
+data class KnightRankInfo(
+    val tier: Int,
+    val title: String,
+    val currentStars: Int,
+    val nextTierStars: Int,
+    val progressFraction: Float
+)
+
 data class PlayerData(
     val coins: Int = 0,
     val level: Int = 1, // Highest unlocked level
@@ -36,11 +47,39 @@ data class PlayerData(
     val dailyLevelsCompleted: Int = 0,
     val dailyQuestsEpochDay: Long = 0L,
     val claimedDailyQuestsMask: Int = 0,
+    val starChestClaimedTier: Int = 0, // Cada 12 estrellas desbloquea un Cofre de Estrellas Real
     // Accesibilidad y preferencias de Game Feel
     val soundEnabled: Boolean = true,
     val hapticsEnabled: Boolean = true,
     val reducedMotion: Boolean = false
 ) {
+    val totalStars: Int
+        get() = levelStars.values.sum()
+
+    val nextStarChestTarget: Int
+        get() = (starChestClaimedTier + 1) * STAR_CHEST_STEP
+
+    val canClaimStarChest: Boolean
+        get() = totalStars >= nextStarChestTarget && starChestClaimedTier < MAX_STAR_CHEST_TIERS
+
+    val starChestProgressFraction: Float
+        get() {
+            val prevTarget = starChestClaimedTier * STAR_CHEST_STEP
+            val span = (nextStarChestTarget - prevTarget).coerceAtLeast(1)
+            return ((totalStars - prevTarget).toFloat() / span).coerceIn(0f, 1f)
+        }
+
+    fun getKnightRankInfo(): KnightRankInfo {
+        val stars = totalStars
+        return when {
+            stars < 8 -> KnightRankInfo(1, "Escudera de Bronce", stars, 8, (stars / 8f).coerceIn(0f, 1f))
+            stars < 20 -> KnightRankInfo(2, "Caballera del Bosque", stars, 20, ((stars - 8) / 12f).coerceIn(0f, 1f))
+            stars < 38 -> KnightRankInfo(3, "Guardiana de Cristal", stars, 38, ((stars - 20) / 18f).coerceIn(0f, 1f))
+            stars < 56 -> KnightRankInfo(4, "Paladina de la Corona", stars, 56, ((stars - 38) / 18f).coerceIn(0f, 1f))
+            else -> KnightRankInfo(5, "Leyenda del Reino", stars, 75, ((stars - 56) / 19f).coerceIn(0f, 1f))
+        }
+    }
+
     /**
      * Genera la lista de 3 misiones diarias activas con su progreso actual.
      */
@@ -73,4 +112,9 @@ data class PlayerData(
             isClaimed = (claimedDailyQuestsMask and 4) != 0
         )
     )
+
+    companion object {
+        const val STAR_CHEST_STEP = 10
+        const val MAX_STAR_CHEST_TIERS = 7
+    }
 }

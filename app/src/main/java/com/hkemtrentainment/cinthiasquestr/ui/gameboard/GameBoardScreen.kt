@@ -19,6 +19,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -31,6 +32,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -38,13 +40,9 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Build
-import androidx.compose.material.icons.filled.Clear
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -65,6 +63,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
@@ -76,7 +75,6 @@ import androidx.compose.ui.graphics.ColorMatrix
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
@@ -98,6 +96,9 @@ import com.hkemtrentainment.cinthiasquestr.CinthiasQuestApp
 import com.hkemtrentainment.cinthiasquestr.R
 import com.hkemtrentainment.cinthiasquestr.audio.GameSound
 import com.hkemtrentainment.cinthiasquestr.data.WorldRepository
+import com.hkemtrentainment.cinthiasquestr.ui.components.BoosterCanvasIcon
+import com.hkemtrentainment.cinthiasquestr.ui.components.MedievalPalette
+import com.hkemtrentainment.cinthiasquestr.ui.components.StreakFlameIcon
 import com.hkemtrentainment.cinthiasquestr.ui.gameboard.components.GameTopBar
 import com.hkemtrentainment.cinthiasquestr.ui.gameboard.components.OutOfMovesDialog
 import com.hkemtrentainment.cinthiasquestr.ui.gameboard.components.PauseDialog
@@ -174,7 +175,6 @@ fun GameBoardScreen(
     val activeLaserBeams = remember { mutableStateListOf<VisualLaserBeam>() }
     var frameTickNanos by remember { mutableLongStateOf(0L) }
 
-    // Bucle de simulación de partículas a 60fps cuando hay efectos activos
     LaunchedEffect(
         activeParticles.size,
         activeShockwaves.size,
@@ -193,7 +193,7 @@ fun GameBoardScreen(
                 val p = pIter.next()
                 p.xNorm += p.vxNorm * dt
                 p.yNorm += p.vyNorm * dt
-                p.vyNorm += 1.45f * dt // Gravedad hacia abajo
+                p.vyNorm += 1.45f * dt
                 p.alpha -= p.decayRate * dt
                 if (p.alpha <= 0f) {
                     pIter.remove()
@@ -430,22 +430,27 @@ fun GameBoardScreen(
                         .zIndex(5f)
                 ) {
                     Surface(
-                        color = Color(0xFF3E2723),
+                        color = MedievalPalette.IronDark,
                         shape = RoundedCornerShape(20.dp),
-                        border = androidx.compose.foundation.BorderStroke(2.dp, Color(0xFFFFD700)),
+                        border = BorderStroke(2.dp, MedievalPalette.GoldBright),
                         shadowElevation = 8.dp
                     ) {
-                        Text(
-                            text = gameState.streakBannerText ?: "",
-                            color = Color(0xFFFFD700),
-                            fontWeight = FontWeight.ExtraBold,
-                            fontSize = 12.sp,
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-                        )
+                        Row(
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            StreakFlameIcon(size = 16.dp)
+                            Text(
+                                text = gameState.streakBannerText ?: "",
+                                color = MedievalPalette.GoldBright,
+                                fontWeight = FontWeight.Black,
+                                fontSize = 12.sp
+                            )
+                        }
                     }
                 }
 
-                // Capa de oscurecimiento DETRÁS del tablero (zIndex = 1f) para resaltar las fichas
                 if (isSelectingBoosterTarget) {
                     Box(
                         modifier = Modifier
@@ -455,28 +460,30 @@ fun GameBoardScreen(
                             .clickable { viewModel.cancelActiveBooster() }
                     ) {
                         Surface(
-                            color = Color(0xFF3E2723),
+                            color = MedievalPalette.IronDark,
                             shape = RoundedCornerShape(16.dp),
                             modifier = Modifier
                                 .align(Alignment.TopCenter)
                                 .padding(top = 20.dp, start = 16.dp, end = 16.dp)
-                                .border(2.dp, Color(0xFFFFD700), RoundedCornerShape(16.dp))
+                                .border(2.dp, MedievalPalette.GoldBright, RoundedCornerShape(16.dp))
                         ) {
                             Column(
                                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp),
                                 horizontalAlignment = Alignment.CenterHorizontally
                             ) {
                                 Text(
-                                    text = "TOCA UNA FICHA PARA USAR ${gameState.activeBooster?.displayName?.uppercase() ?: ""}",
+                                    text = "SELECCIONA UNA CASILLA PARA USAR ${gameState.activeBooster?.displayName?.uppercase() ?: ""}",
                                     style = MaterialTheme.typography.titleSmall,
-                                    color = Color(0xFFFFD700),
-                                    fontWeight = FontWeight.ExtraBold
+                                    color = MedievalPalette.GoldBright,
+                                    fontWeight = FontWeight.Black,
+                                    textAlign = TextAlign.Center
                                 )
                                 TextButton(onClick = { viewModel.cancelActiveBooster() }) {
                                     Text(
-                                        text = "Cancelar",
-                                        color = Color(0xFFF5E6CE),
-                                        fontSize = 12.sp
+                                        text = "Cancelar Acción",
+                                        color = Color(0xFFF6EAD4),
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold
                                     )
                                 }
                             }
@@ -489,7 +496,6 @@ fun GameBoardScreen(
                 var dragOffsetY by remember { mutableFloatStateOf(0f) }
                 var isHorizontalDrag by remember { mutableStateOf<Boolean?>(null) }
 
-                // Limpiar cualquier arrastre residual cuando el tablero cambia de estado o al revivir
                 LaunchedEffect(gameState.boardState, gameState.isGameOver, gameState.isGameWon) {
                     if (gameState.boardState != BoardState.IDLE || gameState.isGameOver || gameState.isGameWon) {
                         activeDragCell = null
@@ -510,7 +516,7 @@ fun GameBoardScreen(
                     label = "dragY"
                 )
 
-                // 2. Contenedor del Tablero 8x8 (con Screen Shake, Partículas y Popups Flotantes)
+                // Contenedor del Tablero 8x8
                 Box(
                     modifier = Modifier
                         .size(boardSize)
@@ -528,7 +534,7 @@ fun GameBoardScreen(
                         }
                         .then(
                             if (isSelectingBoosterTarget) {
-                                Modifier.border(4.dp, Color(0xFFFFD700), RoundedCornerShape(16.dp))
+                                Modifier.border(4.dp, MedievalPalette.GoldBright, RoundedCornerShape(16.dp))
                             } else Modifier
                         )
                 ) {
@@ -567,8 +573,6 @@ fun GameBoardScreen(
                         }
                     }
 
-                    // Grilla interactiva 8x8 con detección de gestos unificada en el contenedor
-                    // (evita que el re-key de piezas o diálogos como OutOfMovesDialog congelen los gestos)
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
@@ -771,18 +775,16 @@ fun GameBoardScreen(
                             }
                         }
 
-                        // Capa superior de Partículas, Ondas de Choque y Rayos de Line Blaster a 60fps
                         Canvas(
                             modifier = Modifier
                                 .fillMaxSize()
                                 .zIndex(3f)
                         ) {
-                            val tick = frameTickNanos // Suscripción al frame clock
+                            val tick = frameTickNanos
                             if (tick >= 0L) {
                                 val w = size.width
                                 val h = size.height
 
-                                // 1. Rayos láser de Line Blaster
                                 activeLaserBeams.forEach { beam ->
                                     val a = beam.alpha.coerceIn(0f, 1f)
                                     if (beam.isRow) {
@@ -824,7 +826,6 @@ fun GameBoardScreen(
                                     }
                                 }
 
-                                // 2. Ondas expansivas circulares (Shockwaves)
                                 activeShockwaves.forEach { sw ->
                                     val p = sw.progress.coerceIn(0f, 1f)
                                     val cx = (sw.centerCol / 8f) * w
@@ -840,7 +841,6 @@ fun GameBoardScreen(
                                     )
                                 }
 
-                                // 3. Partículas radiales con gravedad
                                 activeParticles.forEach { pt ->
                                     val a = pt.alpha.coerceIn(0f, 1f)
                                     val px = pt.xNorm * w
@@ -855,15 +855,14 @@ fun GameBoardScreen(
                             }
                         }
 
-                        // Capa de Textos Flotantes de Puntos y Combos (sin Surface para no interceptar toques)
                         FloatingPopupsOverlay(
                             popups = gameState.floatingPopups,
                             boardInnerSizePx = totalW
                         )
-                    } // closes padding Box
-                } // closes board container Box
-            } // closes board outer Box
-        } // closes Scaffold content
+                    }
+                }
+            }
+        }
 
         if (gameState.isGameWon) {
             VictoryDialog(
@@ -953,17 +952,17 @@ private fun FloatingPopupsOverlay(
                         Box(
                             modifier = Modifier
                                 .background(
-                                    color = Color(0xFF3E2723).copy(alpha = 0.92f),
+                                    color = MedievalPalette.IronDark.copy(alpha = 0.94f),
                                     shape = RoundedCornerShape(10.dp)
                                 )
-                                .border(1.5.dp, Color(0xFFFFD700), RoundedCornerShape(10.dp))
+                                .border(1.5.dp, MedievalPalette.GoldBright, RoundedCornerShape(10.dp))
                                 .padding(horizontal = 8.dp, vertical = 2.dp)
                         ) {
                             Text(
                                 text = popup.calloutText,
-                                color = Color(0xFFFFD700),
+                                color = MedievalPalette.GoldBright,
                                 fontSize = 11.sp,
-                                fontWeight = FontWeight.ExtraBold
+                                fontWeight = FontWeight.Black
                             )
                         }
                     }
@@ -971,7 +970,7 @@ private fun FloatingPopupsOverlay(
                         text = popup.pointsText,
                         color = Color(popup.colorHex),
                         fontSize = 17.sp,
-                        fontWeight = FontWeight.ExtraBold,
+                        fontWeight = FontWeight.Black,
                         textAlign = TextAlign.Center
                     )
                 }
@@ -1024,7 +1023,6 @@ fun CinthiaCharacter(
 
     val jumpDp = if (state == CinthiaState.CHEERING) (-18f * jumpPhase) else (-3f * jumpPhase)
 
-    // Squash & Stretch sutil para dar vida al personaje
     val characterScaleX = if (state == CinthiaState.CHEERING) {
         1f + 0.08f * (1f - jumpPhase)
     } else {
@@ -1069,8 +1067,7 @@ fun CinthiaCharacter(
             colorFilter = ColorFilter.colorMatrix(colorMatrix)
         )
 
-        // Burbuja de diálogo reactiva de Cinthia (feedback emocional y pistas)
-        val displayBubble = speechText ?: if (comboCount >= 2) "✨ ¡Combo x$comboCount!" else null
+        val displayBubble = speechText ?: if (comboCount >= 2) "¡COMBO x$comboCount!" else null
         AnimatedVisibility(
             visible = displayBubble != null,
             enter = fadeIn() + scaleIn(),
@@ -1082,15 +1079,15 @@ fun CinthiaCharacter(
             Box(
                 modifier = Modifier
                     .shadow(6.dp, RoundedCornerShape(14.dp))
-                    .background(Color(0xFFFFF8E1), RoundedCornerShape(14.dp))
-                    .border(2.dp, Color(0xFF3E2723), RoundedCornerShape(14.dp))
+                    .background(MedievalPalette.ParchmentLight, RoundedCornerShape(14.dp))
+                    .border(2.dp, MedievalPalette.InkOutline, RoundedCornerShape(14.dp))
                     .padding(horizontal = 10.dp, vertical = 5.dp)
             ) {
                 Text(
                     text = displayBubble ?: "",
-                    color = Color(0xFF3E2723),
+                    color = MedievalPalette.ParchmentTextDark,
                     fontSize = 11.sp,
-                    fontWeight = FontWeight.ExtraBold
+                    fontWeight = FontWeight.Black
                 )
             }
         }
@@ -1106,7 +1103,7 @@ fun BoosterBar(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 8.dp),
+            .padding(vertical = 6.dp, horizontal = 24.dp),
         horizontalArrangement = Arrangement.SpaceEvenly,
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -1114,21 +1111,18 @@ fun BoosterBar(
             type = BoosterType.HAMMER,
             count = inventory[BoosterType.HAMMER] ?: 0,
             isActive = activeBooster == BoosterType.HAMMER,
-            icon = Icons.Default.Build,
             onClick = { onBoosterClick(BoosterType.HAMMER) }
         )
         BoosterItem(
             type = BoosterType.DYNAMITE,
             count = inventory[BoosterType.DYNAMITE] ?: 0,
             isActive = activeBooster == BoosterType.DYNAMITE,
-            icon = Icons.Default.Clear,
             onClick = { onBoosterClick(BoosterType.DYNAMITE) }
         )
         BoosterItem(
             type = BoosterType.SHUFFLE,
             count = inventory[BoosterType.SHUFFLE] ?: 0,
             isActive = activeBooster == BoosterType.SHUFFLE,
-            icon = Icons.Default.Refresh,
             onClick = { onBoosterClick(BoosterType.SHUFFLE) }
         )
     }
@@ -1139,52 +1133,87 @@ fun BoosterItem(
     type: BoosterType,
     count: Int,
     isActive: Boolean,
-    icon: ImageVector,
     onClick: () -> Unit
 ) {
     val scale by animateFloatAsState(
-        targetValue = if (isActive) 1.18f else 1.0f,
+        targetValue = if (isActive) 1.15f else 1.0f,
         animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy),
         label = "boosterScale"
     )
 
-    Box(
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier
             .scale(scale)
-            .size(56.dp)
-            .shadow(4.dp, RoundedCornerShape(12.dp))
-            .background(
-                if (isActive) Color(0xFFFFD700) else Color(0xFF3E2723),
-                shape = RoundedCornerShape(12.dp)
-            )
-            .border(
-                2.dp,
-                if (isActive) Color.White else Color(0xFF8D6E63),
-                shape = RoundedCornerShape(12.dp)
-            )
-            .clickable { onClick() },
-        contentAlignment = Alignment.Center
+            .clickable(onClick = onClick)
     ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = type.displayName,
-            tint = if (isActive) Color(0xFF3E2723) else Color(0xFFF5E6CE),
-            modifier = Modifier.size(28.dp)
-        )
+        Box(contentAlignment = Alignment.Center) {
+            // Pedestal 3D de Hierro Forjado y Oro para el Booster
+            Box(
+                modifier = Modifier
+                    .size(56.dp)
+                    .offset(y = 3.dp)
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(MedievalPalette.InkOutline)
+            )
+            Box(
+                modifier = Modifier
+                    .size(56.dp)
+                    .shadow(6.dp, RoundedCornerShape(16.dp))
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(
+                        if (isActive) {
+                            Brush.verticalGradient(listOf(Color(0xFFFFE082), Color(0xFFFF8F00)))
+                        } else {
+                            Brush.verticalGradient(listOf(MedievalPalette.IronHighlight, MedievalPalette.IronDark))
+                        }
+                    )
+                    .border(
+                        width = 2.5.dp,
+                        color = if (isActive) Color.White else MedievalPalette.BrassFrame,
+                        shape = RoundedCornerShape(16.dp)
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                BoosterCanvasIcon(
+                    type = type,
+                    size = 30.dp
+                )
+            }
 
-        Box(
-            modifier = Modifier
-                .align(Alignment.TopEnd)
-                .offset(x = 4.dp, y = (-4).dp)
-                .size(20.dp)
-                .background(if (count > 0) Color(0xFFE53935) else Color(0xFF78909C), shape = CircleShape),
-            contentAlignment = Alignment.Center
+            // Contador circular de unidades
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .offset(x = 5.dp, y = (-4).dp)
+                    .size(22.dp)
+                    .clip(CircleShape)
+                    .background(if (count > 0) Color(0xFFD32F2F) else Color(0xFF546E7A))
+                    .border(1.5.dp, Color.White, CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "$count",
+                    color = Color.White,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Black
+                )
+            }
+        }
+
+        // Etiqueta diegética inferior con el nombre de la reliquia
+        Surface(
+            color = MedievalPalette.IronDark.copy(alpha = 0.92f),
+            shape = RoundedCornerShape(8.dp),
+            border = BorderStroke(1.dp, if (isActive) MedievalPalette.GoldBright else MedievalPalette.BrassFrame),
+            modifier = Modifier.offset(y = (-3).dp)
         ) {
             Text(
-                text = "$count",
-                color = Color.White,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Bold
+                text = type.displayName.uppercase(),
+                color = if (isActive) MedievalPalette.GoldBright else Color(0xFFF6EAD4),
+                fontSize = 9.sp,
+                fontWeight = FontWeight.Black,
+                modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp)
             )
         }
     }
@@ -1195,15 +1224,16 @@ fun AdMobPlaceholder() {
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(50.dp)
-            .background(Color.Black.copy(alpha = 0.35f)),
+            .height(42.dp)
+            .background(Color(0xFF120D10).copy(alpha = 0.85f)),
         contentAlignment = Alignment.Center
     ) {
         Text(
-            text = "Espacio Publicitario (AdMob)",
-            color = Color(0xFF8D6E63),
-            fontSize = 12.sp,
-            fontWeight = FontWeight.Medium
+            text = "PATROCINIO REAL · ADMOB BANNER",
+            color = Color(0xFF7A685D),
+            fontSize = 10.sp,
+            fontWeight = FontWeight.Bold,
+            letterSpacing = 1.2.sp
         )
     }
 }

@@ -3,16 +3,22 @@ package com.hkemtrentainment.cinthiasquestr.ui.gameboard.components
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Shield
+import androidx.compose.material.icons.filled.Vibration
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
@@ -21,11 +27,19 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import com.hkemtrentainment.cinthiasquestr.ui.components.ArcadeButtonStyle
+import com.hkemtrentainment.cinthiasquestr.ui.components.ChunkyArcadeButton
+import com.hkemtrentainment.cinthiasquestr.ui.components.ForgedIronPanel
+import com.hkemtrentainment.cinthiasquestr.ui.components.MedievalPalette
+import com.hkemtrentainment.cinthiasquestr.ui.components.RoyalCrownIcon
+import com.hkemtrentainment.cinthiasquestr.ui.components.RoyalParchmentCard
 import com.hkemtrentainment.cinthiasquestr.ui.theme.CinthiasQuestTheme
 
 @Composable
@@ -41,93 +55,111 @@ fun PauseDialog(
     onQuitClick: () -> Unit
 ) {
     Dialog(onDismissRequest = onResumeClick) {
-        Card(
+        RoyalParchmentCard(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
-            shape = MaterialTheme.shapes.large,
-            colors = CardDefaults.cardColors(
-                containerColor = Color(0xFFF5E6CE),
-            ),
-            border = BorderStroke(2.dp, Color(0xFF3E2723))
+                .padding(10.dp),
+            contentPadding = PaddingValues(20.dp)
         ) {
             Column(
-                modifier = Modifier
-                    .padding(22.dp)
-                    .fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth(),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Text(
-                    text = "Juego en Pausa",
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = Color(0xFF3E2723)
-                )
-
-                // Controles de Game Feel & Accesibilidad (Sonido, Háptica y Reducción de Sacudida)
-                Surface(
-                    modifier = Modifier.fillMaxWidth(),
-                    color = Color(0xFFEDE0D4),
-                    shape = RoundedCornerShape(14.dp),
-                    border = BorderStroke(1.dp, Color(0xFFD7CCC8))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Column(
-                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
+                    RoyalCrownIcon(size = 24.dp)
+                    Text(
+                        text = "GUARDIA EN PAUSA",
+                        fontFamily = FontFamily.Serif,
+                        fontWeight = FontWeight.Black,
+                        fontSize = 20.sp,
+                        color = MedievalPalette.ParchmentTextDark
+                    )
+                }
+
+                // Panel diegético de ajustes de combate y accesibilidad
+                ForgedIronPanel(
+                    modifier = Modifier.fillMaxWidth(),
+                    cornerRadius = 16.dp,
+                    trimColor = MedievalPalette.BrassFrame,
+                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp)
+                ) {
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         SettingSwitchRow(
-                            label = "🔊 Efectos de Sonido",
+                            icon = Icons.AutoMirrored.Filled.VolumeUp,
+                            label = "Efectos de Sonido",
                             checked = soundEnabled,
                             onCheckedChange = onToggleSound
                         )
                         SettingSwitchRow(
-                            label = "📳 Vibración Háptica",
+                            icon = Icons.Default.Vibration,
+                            label = "Respuesta Háptica",
                             checked = hapticsEnabled,
                             onCheckedChange = onToggleHaptics
                         )
                         SettingSwitchRow(
-                            label = "🛡️ Reducir Sacudida (Screen Shake)",
+                            icon = Icons.Default.Shield,
+                            label = "Estabilizar Cámara (Sin Shake)",
                             checked = reducedMotion,
                             onCheckedChange = onToggleReducedMotion
                         )
                     }
                 }
 
-                Button(
+                Spacer(modifier = Modifier.height(2.dp))
+
+                ChunkyArcadeButton(
                     onClick = onResumeClick,
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = Color(0xFF3E2723),
-                        contentColor = Color(0xFFF5E6CE)
-                    )
+                    style = ArcadeButtonStyle.EMERALD_PLAY,
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text(text = "Continuar Partida", fontWeight = FontWeight.Bold)
+                    Icon(
+                        imageVector = Icons.Default.PlayArrow,
+                        contentDescription = null,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "CONTINUAR BATALLA",
+                        fontWeight = FontWeight.Black,
+                        fontSize = 14.sp
+                    )
                 }
 
-                OutlinedButton(
+                ChunkyArcadeButton(
                     onClick = {
                         onResumeClick()
                         onRestartClick()
                     },
-                    modifier = Modifier.fillMaxWidth(),
-                    border = BorderStroke(1.5.dp, Color(0xFF5D4037)),
-                    colors = ButtonDefaults.outlinedButtonColors(
-                        contentColor = Color(0xFF3E2723)
-                    )
+                    style = ArcadeButtonStyle.ROYAL_GOLD,
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text(text = "Reiniciar Nivel", fontWeight = FontWeight.SemiBold)
+                    Icon(
+                        imageVector = Icons.Default.Refresh,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "REINICIAR NIVEL",
+                        fontWeight = FontWeight.Black,
+                        fontSize = 13.sp
+                    )
                 }
 
-                OutlinedButton(
+                ChunkyArcadeButton(
                     onClick = onQuitClick,
-                    modifier = Modifier.fillMaxWidth(),
-                    border = BorderStroke(1.dp, Color(0xFF3E2723)),
-                    colors = ButtonDefaults.outlinedButtonColors(
-                        contentColor = Color(0xFF3E2723)
-                    )
+                    style = ArcadeButtonStyle.IRON_SLATE,
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text(text = "Salir al Mapa de Mundos")
+                    Text(
+                        text = "RETIRARSE AL MAPA DEL REINO",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 12.sp
+                    )
                 }
             }
         }
@@ -136,6 +168,7 @@ fun PauseDialog(
 
 @Composable
 private fun SettingSwitchRow(
+    icon: ImageVector,
     label: String,
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit
@@ -145,18 +178,39 @@ private fun SettingSwitchRow(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        Text(
-            text = label,
-            fontSize = 13.sp,
-            fontWeight = FontWeight.SemiBold,
-            color = Color(0xFF3E2723)
-        )
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.weight(1f)
+        ) {
+            Surface(
+                color = Color(0xFF140E12),
+                shape = RoundedCornerShape(8.dp),
+                border = BorderStroke(1.dp, MedievalPalette.BrassFrame),
+                modifier = Modifier.size(28.dp)
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = MedievalPalette.GoldBright,
+                    modifier = Modifier.padding(5.dp)
+                )
+            }
+            Text(
+                text = label,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFFF6EAD4)
+            )
+        }
         Switch(
             checked = checked,
             onCheckedChange = onCheckedChange,
             colors = SwitchDefaults.colors(
-                checkedThumbColor = Color(0xFF3E2723),
-                checkedTrackColor = Color(0xFFFFB300)
+                checkedThumbColor = Color(0xFF2B180A),
+                checkedTrackColor = MedievalPalette.GoldBright,
+                uncheckedThumbColor = Color(0xFFBDB3B8),
+                uncheckedTrackColor = Color(0xFF1B1418)
             )
         )
     }

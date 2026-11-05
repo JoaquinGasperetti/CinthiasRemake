@@ -7,23 +7,23 @@ import androidx.compose.animation.core.animateIntAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Star
-import androidx.compose.material.icons.outlined.Star
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -33,7 +33,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -41,6 +43,16 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import com.hkemtrentainment.cinthiasquestr.R
+import com.hkemtrentainment.cinthiasquestr.ui.components.ArcadeButtonStyle
+import com.hkemtrentainment.cinthiasquestr.ui.components.ChunkyArcadeButton
+import com.hkemtrentainment.cinthiasquestr.ui.components.ForgedIronPanel
+import com.hkemtrentainment.cinthiasquestr.ui.components.GoldCoinIcon
+import com.hkemtrentainment.cinthiasquestr.ui.components.MedievalPalette
+import com.hkemtrentainment.cinthiasquestr.ui.components.RoyalCrownIcon
+import com.hkemtrentainment.cinthiasquestr.ui.components.RoyalParchmentCard
+import com.hkemtrentainment.cinthiasquestr.ui.components.RoyalStarIcon
+import com.hkemtrentainment.cinthiasquestr.ui.components.StreakFlameIcon
 import kotlinx.coroutines.delay
 
 @Composable
@@ -56,11 +68,10 @@ fun VictoryDialog(
     onNextLevelClick: () -> Unit,
     onWorldMapClick: () -> Unit
 ) {
-    // Aparición secuencial con rebote elástico para cada una de las 3 estrellas
     val starScales = remember { List(3) { Animatable(0f) } }
     LaunchedEffect(stars) {
         starScales.forEachIndexed { idx, anim ->
-            delay(idx * 190L)
+            delay(idx * 170L)
             anim.animateTo(
                 targetValue = if (idx < stars) 1f else 0.85f,
                 animationSpec = spring(
@@ -87,146 +98,208 @@ fun VictoryDialog(
         onDismissRequest = { },
         properties = DialogProperties(dismissOnBackPress = false, dismissOnClickOutside = false)
     ) {
-        Surface(
-            shape = RoundedCornerShape(22.dp),
-            color = Color(0xFFF5E6CE),
-            border = BorderStroke(4.dp, Color(0xFF3E2723)),
+        RoyalParchmentCard(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(14.dp)
+                .padding(8.dp),
+            accentTrimColor = MedievalPalette.GoldMid,
+            contentPadding = PaddingValues(0.dp)
         ) {
-            Column(
-                modifier = Modifier.padding(22.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Text(
-                    text = if (hasNextLevel) "¡Nivel Completado!" else "¡Aventura Completada!",
-                    style = MaterialTheme.typography.headlineMedium.copy(
-                        fontFamily = FontFamily.Serif,
-                        fontWeight = FontWeight.Bold,
-                        color = Color(0xFF3E2723)
-                    ),
-                    textAlign = TextAlign.Center
-                )
-
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    repeat(3) { index ->
-                        val isStarEarned = index < stars
-                        val size = if (index == 1) 52.dp else 40.dp
-                        Icon(
-                            imageVector = if (isStarEarned) Icons.Filled.Star else Icons.Outlined.Star,
-                            contentDescription = null,
-                            tint = if (isStarEarned) Color(0xFFFFD700) else Color(0xFFB0BEC5),
-                            modifier = Modifier
-                                .size(size)
-                                .scale(starScales[index].value)
+            // Estandarte Superior de Victoria Real
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(
+                        Brush.horizontalGradient(
+                            colors = listOf(Color(0xFF1B5E20), Color(0xFF2E7D32), Color(0xFF1B5E20))
                         )
-                    }
-                }
-
-                if (winStreak >= 1) {
-                    Surface(
-                        color = Color(0xFF3E2723),
-                        shape = RoundedCornerShape(14.dp),
-                        border = BorderStroke(1.5.dp, Color(0xFFFFD700))
-                    ) {
-                        val nextPowerUps = winStreak.coerceIn(1, 3)
-                        Text(
-                            text = "🔥 Racha de Victorias x$winStreak · +$nextPowerUps Power-Up${if (nextPowerUps > 1) "s" else ""} en el próximo nivel",
-                            color = Color(0xFFFFD700),
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
-                        )
-                    }
-                }
-
-                Text(
-                    text = "Puntuación Final: $animatedScore",
-                    style = MaterialTheme.typography.titleLarge.copy(
-                        fontFamily = FontFamily.Serif,
-                        color = Color(0xFF5D4037),
-                        fontWeight = FontWeight.Bold
-                    ),
-                    textAlign = TextAlign.Center
-                )
-
-                if (bonusMovesScore > 0) {
-                    Text(
-                        text = "(Incluye +$bonusMovesScore pts de Bonus por Movimientos)",
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = Color(0xFF6D4C41),
-                        textAlign = TextAlign.Center
                     )
+                    .padding(vertical = 14.dp, horizontal = 16.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        RoyalCrownIcon(size = 24.dp)
+                        Text(
+                            text = if (hasNextLevel) "¡VICTORIA REAL!" else "¡REINO LIBERADO!",
+                            fontFamily = FontFamily.Serif,
+                            fontWeight = FontWeight.Black,
+                            fontSize = 22.sp,
+                            color = MedievalPalette.GoldBright
+                        )
+                        RoyalCrownIcon(size = 24.dp)
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    // Trío de Estrellas Facetadas con Rebote Secuencial
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        repeat(3) { index ->
+                            val isStarEarned = index < stars
+                            val starSize = if (index == 1) 52.dp else 40.dp
+                            RoyalStarIcon(
+                                filled = isStarEarned,
+                                size = starSize,
+                                modifier = Modifier.scale(starScales[index].value)
+                            )
+                        }
+                    }
+                }
+            }
+
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(18.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                // Tarjeta de Puntuación y Botín con Retrato de Cinthia
+                ForgedIronPanel(
+                    modifier = Modifier.fillMaxWidth(),
+                    cornerRadius = 16.dp,
+                    trimColor = MedievalPalette.GoldMid,
+                    contentPadding = PaddingValues(12.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Surface(
+                            color = Color(0xFF161014),
+                            shape = RoundedCornerShape(14.dp),
+                            border = BorderStroke(1.5.dp, MedievalPalette.GoldBright),
+                            modifier = Modifier.size(64.dp)
+                        ) {
+                            Image(
+                                painter = painterResource(id = R.drawable.cinthia_idle_01),
+                                contentDescription = "Cinthia Victoriosa",
+                                modifier = Modifier.padding(4.dp)
+                            )
+                        }
+
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(3.dp)
+                        ) {
+                            Text(
+                                text = "PUNTUACIÓN: $animatedScore",
+                                color = Color.White,
+                                fontWeight = FontWeight.Black,
+                                fontSize = 15.sp
+                            )
+                            if (bonusMovesScore > 0) {
+                                Text(
+                                    text = "Bonus de movimientos: +$bonusMovesScore pts",
+                                    color = Color(0xFF81C784),
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                GoldCoinIcon(size = 18.dp)
+                                Text(
+                                    text = "Botín: +$animatedCoins Monedas",
+                                    color = MedievalPalette.GoldBright,
+                                    fontWeight = FontWeight.Black,
+                                    fontSize = 14.sp
+                                )
+                            }
+                        }
+                    }
                 }
 
-                Text(
-                    text = "Recompensa: +$animatedCoins 🪙",
-                    style = MaterialTheme.typography.bodyLarge.copy(
-                        fontFamily = FontFamily.Serif,
-                        color = Color(0xFF2E7D32),
-                        fontWeight = FontWeight.ExtraBold
-                    ),
-                    textAlign = TextAlign.Center
-                )
+                // Insignia de Progreso de Racha de la Caballera
+                if (winStreak >= 1) {
+                    val nextPowerUps = winStreak.coerceIn(1, 3)
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        color = Color(0xFFFDF7EC),
+                        shape = RoundedCornerShape(12.dp),
+                        border = BorderStroke(1.5.dp, Color(0xFFE65100))
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            StreakFlameIcon(size = 20.dp)
+                            Text(
+                                text = "Racha x$winStreak: Empezarás el próximo nivel con +$nextPowerUps Reliquia${if (nextPowerUps > 1) "s" else ""} en el tablero",
+                                color = MedievalPalette.ParchmentTextDark,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.ExtraBold
+                            )
+                        }
+                    }
+                }
 
                 Spacer(modifier = Modifier.height(2.dp))
 
-                if (!doubleCoinsClaimed) {
-                    Button(
-                        onClick = onWatchAdClick,
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = Color(0xFF8D6E63),
-                            contentColor = Color.White
-                        ),
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Text(
-                            text = "Ver Anuncio (Doble Monedas +$earnedCoins 🪙)",
-                            fontFamily = FontFamily.Serif,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                }
-
+                // Botón Principal: Siguiente Nivel (1-Tap Loop)
                 if (hasNextLevel) {
-                    Button(
+                    ChunkyArcadeButton(
                         onClick = onNextLevelClick,
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = Color(0xFFFFB300),
-                            contentColor = Color(0xFF3E2723)
-                        ),
-                        shape = RoundedCornerShape(12.dp)
+                        style = ArcadeButtonStyle.EMERALD_PLAY,
+                        cornerRadius = 16.dp,
+                        lipHeight = 6.dp,
+                        modifier = Modifier.fillMaxWidth()
                     ) {
+                        Icon(
+                            imageVector = Icons.Default.PlayArrow,
+                            contentDescription = null,
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = "SIGUIENTE NIVEL ➔",
-                            fontFamily = FontFamily.Serif,
-                            fontWeight = FontWeight.ExtraBold
+                            text = "SIGUIENTE NIVEL",
+                            fontSize = 17.sp,
+                            fontWeight = FontWeight.Black,
+                            fontFamily = FontFamily.Serif
                         )
                     }
                 }
 
-                OutlinedButton(
+                // Botón de Duplicar Monedas (Rewarded Video Hook)
+                if (!doubleCoinsClaimed) {
+                    ChunkyArcadeButton(
+                        onClick = onWatchAdClick,
+                        style = ArcadeButtonStyle.ROYAL_GOLD,
+                        cornerRadius = 14.dp,
+                        lipHeight = 4.dp,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        GoldCoinIcon(size = 18.dp)
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "DUPLICAR BOTÍN (+$earnedCoins ORO EXTRA)",
+                            fontWeight = FontWeight.Black,
+                            fontSize = 12.sp
+                        )
+                    }
+                }
+
+                ChunkyArcadeButton(
                     onClick = onWorldMapClick,
-                    modifier = Modifier.fillMaxWidth(),
-                    border = BorderStroke(2.dp, Color(0xFF8D6E63)),
-                    colors = ButtonDefaults.outlinedButtonColors(
-                        contentColor = Color(0xFF8D6E63)
-                    ),
-                    shape = RoundedCornerShape(12.dp)
+                    style = ArcadeButtonStyle.IRON_SLATE,
+                    cornerRadius = 14.dp,
+                    lipHeight = 4.dp,
+                    modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(
-                        text = "MAPA DE MUNDOS",
-                        fontFamily = FontFamily.Serif,
-                        fontWeight = FontWeight.Bold
+                        text = "VOLVER AL MAPA DEL REINO",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 12.sp
                     )
                 }
             }

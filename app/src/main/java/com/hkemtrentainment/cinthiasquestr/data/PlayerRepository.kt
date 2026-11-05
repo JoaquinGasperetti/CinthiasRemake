@@ -36,6 +36,7 @@ class PlayerRepository(private val dataStore: DataStore<Preferences>) {
         val DAILY_LEVELS = intPreferencesKey("daily_levels")
         val DAILY_QUESTS_DAY = longPreferencesKey("daily_quests_day")
         val CLAIMED_QUESTS_MASK = intPreferencesKey("claimed_quests_mask")
+        val STAR_CHEST_TIER = intPreferencesKey("star_chest_tier")
         val SOUND_ENABLED = booleanPreferencesKey("sound_enabled")
         val HAPTICS_ENABLED = booleanPreferencesKey("haptics_enabled")
         val REDUCED_MOTION = booleanPreferencesKey("reduced_motion")
@@ -77,6 +78,7 @@ class PlayerRepository(private val dataStore: DataStore<Preferences>) {
                 dailyLevelsCompleted = if (isSameQuestDay) (preferences[PreferencesKeys.DAILY_LEVELS] ?: 0) else 0,
                 dailyQuestsEpochDay = today,
                 claimedDailyQuestsMask = if (isSameQuestDay) (preferences[PreferencesKeys.CLAIMED_QUESTS_MASK] ?: 0) else 0,
+                starChestClaimedTier = preferences[PreferencesKeys.STAR_CHEST_TIER] ?: 0,
                 soundEnabled = preferences[PreferencesKeys.SOUND_ENABLED] ?: true,
                 hapticsEnabled = preferences[PreferencesKeys.HAPTICS_ENABLED] ?: true,
                 reducedMotion = preferences[PreferencesKeys.REDUCED_MOTION] ?: false
@@ -122,6 +124,53 @@ class PlayerRepository(private val dataStore: DataStore<Preferences>) {
             }
         }
         return purchased
+    }
+
+    /**
+     * Compra el Lote de Asedio Real (1 Martillo + 1 Dinamita + 1 Barajar) con descuento.
+     */
+    suspend fun buyRoyalBoosterBundle(bundleCost: Int = 290): Boolean {
+        if (bundleCost < 0) return false
+        var purchased = false
+        dataStore.edit { preferences ->
+            val currentCoins = preferences[PreferencesKeys.COINS] ?: 0
+            if (currentCoins >= bundleCost) {
+                preferences[PreferencesKeys.COINS] = currentCoins - bundleCost
+                preferences[PreferencesKeys.HAMMER] = (preferences[PreferencesKeys.HAMMER] ?: 1) + 1
+                preferences[PreferencesKeys.DYNAMITE] = (preferences[PreferencesKeys.DYNAMITE] ?: 1) + 1
+                preferences[PreferencesKeys.SHUFFLE] = (preferences[PreferencesKeys.SHUFFLE] ?: 1) + 1
+                purchased = true
+            }
+        }
+        return purchased
+    }
+
+    /**
+     * Reclama el Cofre de Estrellas Real cuando el jugador alcanza el umbral de estrellas (`nextStarChestTarget`).
+     * Otorga 220 monedas + 1 booster adicional.
+     */
+    suspend fun claimStarChestReward(): Pair<Int, BoosterType>? {
+        var result: Pair<Int, BoosterType>? = null
+        dataStore.edit { preferences ->
+            val starsMap = parseStars(preferences[PreferencesKeys.LEVEL_STARS])
+            val totalStars = starsMap.values.sum()
+            val currentTier = preferences[PreferencesKeys.STAR_CHEST_TIER] ?: 0
+            val nextTarget = (currentTier + 1) * PlayerData.STAR_CHEST_STEP
+            if (totalStars >= nextTarget && currentTier < PlayerData.MAX_STAR_CHEST_TIERS) {
+                val coinReward = 220 + currentTier * 30
+                val bonusBooster = BoosterType.entries[currentTier % BoosterType.entries.size]
+                val boosterKey = when (bonusBooster) {
+                    BoosterType.HAMMER -> PreferencesKeys.HAMMER
+                    BoosterType.DYNAMITE -> PreferencesKeys.DYNAMITE
+                    BoosterType.SHUFFLE -> PreferencesKeys.SHUFFLE
+                }
+                preferences[PreferencesKeys.STAR_CHEST_TIER] = currentTier + 1
+                preferences[PreferencesKeys.COINS] = (preferences[PreferencesKeys.COINS] ?: 0) + coinReward
+                preferences[boosterKey] = (preferences[boosterKey] ?: 1) + 1
+                result = coinReward to bonusBooster
+            }
+        }
+        return result
     }
 
     suspend fun updateBoosterCount(type: BoosterType, amount: Int) {

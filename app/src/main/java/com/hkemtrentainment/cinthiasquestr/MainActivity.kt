@@ -33,7 +33,10 @@ class MainActivity : ComponentActivity() {
             val entryProvider = entryProvider<NavKey> {
                 entry<Screen.MainMenu> {
                     MainMenuScreen(
-                        onPlayClick = { navigator.navigate(Screen.WorldMap) }
+                        onPlayClick = { navigator.navigate(Screen.WorldMap) },
+                        onQuickPlayLevelClick = { levelNumber ->
+                            navigator.navigate(Screen.GameBoard(level = levelNumber))
+                        }
                     )
                 }
                 entry<Screen.WorldMap> {

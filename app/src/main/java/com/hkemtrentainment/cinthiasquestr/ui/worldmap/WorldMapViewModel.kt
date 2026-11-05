@@ -18,6 +18,9 @@ data class WorldMapUiState(
     val levelStars: Map<Int, Int> = emptyMap(),
     val totalStars: Int = 0,
     val winStreak: Int = 0,
+    val hammerCount: Int = 1,
+    val dynamiteCount: Int = 1,
+    val shuffleCount: Int = 1,
     val selectedWorld: WorldConfig = WorldRepository.WORLDS.first(),
     val activeDetailLevel: Int? = null
 )
@@ -39,6 +42,9 @@ class WorldMapViewModel(private val playerRepository: PlayerRepository) : ViewMo
                         levelStars = playerData.levelStars,
                         totalStars = totalStars,
                         winStreak = playerData.winStreak,
+                        hammerCount = playerData.hammer,
+                        dynamiteCount = playerData.dynamite,
+                        shuffleCount = playerData.shuffle,
                         selectedWorld = currentWorld
                     )
                 }

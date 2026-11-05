@@ -24,14 +24,8 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Star
-import androidx.compose.material3.Icon
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -48,6 +42,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.hkemtrentainment.cinthiasquestr.R
+import com.hkemtrentainment.cinthiasquestr.ui.components.GoldCoinIcon
+import com.hkemtrentainment.cinthiasquestr.ui.components.RoyalStarIcon
+import com.hkemtrentainment.cinthiasquestr.ui.components.StreakFlameIcon
 
 @Composable
 fun GameTopBar(
@@ -59,7 +56,6 @@ fun GameTopBar(
     winStreak: Int = 0,
     onPauseClick: () -> Unit
 ) {
-    // Animación progresiva del marcador de puntos y monedas (Rolling Numbers Juice)
     val animatedScore by animateIntAsState(
         targetValue = score,
         animationSpec = tween(durationMillis = 380, easing = FastOutSlowInEasing),
@@ -71,7 +67,6 @@ fun GameTopBar(
         label = "animatedCoins"
     )
 
-    // Pulso de alerta cuando quedan pocos movimientos (<= 5)
     val infiniteTransition = rememberInfiniteTransition(label = "topBarUrgency")
     val lowMovesPulse by infiniteTransition.animateFloat(
         initialValue = 1f,
@@ -118,7 +113,7 @@ fun GameTopBar(
             ) {
                 Spacer(modifier = Modifier.weight(0.004f))
 
-                // MOVS con latido de urgencia
+                // MOVIMIENTOS RESTANTES
                 Column(
                     modifier = Modifier
                         .weight(0.192f)
@@ -130,14 +125,14 @@ fun GameTopBar(
                         text = "MOVS",
                         fontSize = 10.sp,
                         color = Color(0xFFD7CCC8),
-                        fontWeight = FontWeight.Bold,
+                        fontWeight = FontWeight.Black,
                         maxLines = 1
                     )
                     Text(
                         text = "$movesLeft",
-                        fontSize = 16.sp,
+                        fontSize = 17.sp,
                         color = if (movesLeft <= 5) Color(0xFFFF5252) else Color.White,
-                        fontWeight = FontWeight.ExtraBold,
+                        fontWeight = FontWeight.Black,
                         maxLines = 1,
                         modifier = Modifier.scale(lowMovesPulse)
                     )
@@ -145,7 +140,7 @@ fun GameTopBar(
 
                 Spacer(modifier = Modifier.weight(0.043f))
 
-                // PUNTOS + Barra de progreso de 3 Estrellas en tiempo real
+                // PUNTOS + BARRA DE 3 ESTRELLAS EN VIVO
                 Column(
                     modifier = Modifier
                         .weight(0.442f)
@@ -156,23 +151,20 @@ fun GameTopBar(
                 ) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        horizontalArrangement = Arrangement.spacedBy(5.dp)
                     ) {
                         Text(
                             text = "$animatedScore / $targetScore",
                             fontSize = 13.sp,
-                            color = if (score >= targetScore) Color(0xFFFFD700) else Color.White,
-                            fontWeight = FontWeight.ExtraBold,
+                            color = if (score >= targetScore) Color(0xFFFFD54F) else Color.White,
+                            fontWeight = FontWeight.Black,
                             maxLines = 1
                         )
-                        Row(horizontalArrangement = Arrangement.spacedBy(1.dp)) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
                             repeat(3) { idx ->
-                                val lit = idx < earnedStarsLive
-                                Icon(
-                                    imageVector = Icons.Default.Star,
-                                    contentDescription = null,
-                                    tint = if (lit) Color(0xFFFFD700) else Color(0xFF8D6E63).copy(alpha = 0.6f),
-                                    modifier = Modifier.size(12.dp)
+                                RoyalStarIcon(
+                                    filled = idx < earnedStarsLive,
+                                    size = 12.dp
                                 )
                             }
                         }
@@ -180,14 +172,13 @@ fun GameTopBar(
 
                     Spacer(modifier = Modifier.height(3.dp))
 
-                    // Barra de progreso con marcadores de 1⭐, 2⭐ y 3⭐
                     Box(
                         modifier = Modifier
                             .fillMaxWidth(0.92f)
                             .height(7.dp)
                             .clip(CircleShape)
-                            .background(Color(0xFF2C1A14))
-                            .border(1.dp, Color(0xFF8D6E63), CircleShape)
+                            .background(Color(0xFF1B1216))
+                            .border(1.dp, Color(0xFF8C734B), CircleShape)
                     ) {
                         Box(
                             modifier = Modifier
@@ -197,7 +188,7 @@ fun GameTopBar(
                                 .background(
                                     Brush.horizontalGradient(
                                         listOf(
-                                            Color(0xFF66BB6A),
+                                            Color(0xFF43D165),
                                             Color(0xFFFFCA28),
                                             Color(0xFFFF8F00)
                                         )
@@ -207,7 +198,7 @@ fun GameTopBar(
                     }
                 }
 
-                // NIVEL, monedas y racha
+                // NIVEL, RACHA Y ORO (con iconos en Canvas en lugar de emojis)
                 Column(
                     modifier = Modifier
                         .weight(0.188f)
@@ -215,24 +206,45 @@ fun GameTopBar(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Center
                 ) {
-                    Text(
-                        text = if (winStreak > 0) "NV.$level 🔥$winStreak" else "NIVEL $level",
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color(0xFFF5E6CE),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Text(
-                        text = "🪙 $animatedCoins",
-                        fontSize = 10.sp,
-                        color = Color(0xFFFFD700),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(3.dp)
+                    ) {
+                        Text(
+                            text = "NV.$level",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Black,
+                            color = Color(0xFFF6EAD4),
+                            maxLines = 1
+                        )
+                        if (winStreak > 0) {
+                            StreakFlameIcon(size = 12.dp)
+                            Text(
+                                text = "x$winStreak",
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Black,
+                                color = Color(0xFFFFCC80),
+                                maxLines = 1
+                            )
+                        }
+                    }
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(3.dp)
+                    ) {
+                        GoldCoinIcon(size = 11.dp)
+                        Text(
+                            text = "$animatedCoins",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFFFFD54F),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
                 }
 
-                // PAUSE
+                // BOTÓN DE PAUSA INTEGRADO EN EL MARCO
                 Box(
                     modifier = Modifier
                         .weight(0.126f)
@@ -240,7 +252,6 @@ fun GameTopBar(
                         .clickable(onClick = onPauseClick),
                     contentAlignment = Alignment.Center
                 ) {
-                    // El ícono ya está en la imagen, el Box transparente lo hace clickeable
                 }
 
                 Spacer(modifier = Modifier.weight(0.005f))
