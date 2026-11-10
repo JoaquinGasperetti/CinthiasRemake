@@ -12,26 +12,17 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material.icons.filled.FlashOn
-import androidx.compose.material.icons.filled.Star
-import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -45,13 +36,48 @@ import com.hkemtrentainment.cinthiasquestr.R
 import java.util.UUID
 import kotlin.math.sin
 
-enum class GamePieceType(val drawableResId: Int, val particleColorHex: Long) {
-    RED(R.drawable.gem_red, 0xFFFF5252),
-    BLUE(R.drawable.gem_blue, 0xFF40C4FF),
-    GREEN(R.drawable.gem_green, 0xFF69F0AE),
-    YELLOW(R.drawable.gem_yellow, 0xFFFFD740),
-    PURPLE(R.drawable.gem_purple, 0xFFE040FB),
-    MAGENTA(R.drawable.gem_magenta, 0xFFFF4081)
+enum class GamePieceType(
+    val drawableResId: Int,
+    val lineBlasterResId: Int,
+    val explosiveBombResId: Int,
+    val particleColorHex: Long
+) {
+    RED(
+        drawableResId = R.drawable.gem_red,
+        lineBlasterResId = R.drawable.line_blaster_red,
+        explosiveBombResId = R.drawable.bomb_red,
+        particleColorHex = 0xFFFF5252
+    ),
+    BLUE(
+        drawableResId = R.drawable.gem_blue,
+        lineBlasterResId = R.drawable.line_blaster_blue,
+        explosiveBombResId = R.drawable.bomb_blue,
+        particleColorHex = 0xFF40C4FF
+    ),
+    GREEN(
+        drawableResId = R.drawable.gem_green,
+        lineBlasterResId = R.drawable.line_blaster_green,
+        explosiveBombResId = R.drawable.bomb_green,
+        particleColorHex = 0xFF69F0AE
+    ),
+    YELLOW(
+        drawableResId = R.drawable.gem_yellow,
+        lineBlasterResId = R.drawable.line_blaster_yellow,
+        explosiveBombResId = R.drawable.bomb_yellow,
+        particleColorHex = 0xFFFFD740
+    ),
+    PURPLE(
+        drawableResId = R.drawable.gem_purple,
+        lineBlasterResId = R.drawable.line_blaster_purple,
+        explosiveBombResId = R.drawable.bomb_purple,
+        particleColorHex = 0xFFE040FB
+    ),
+    MAGENTA(
+        drawableResId = R.drawable.gem_magenta,
+        lineBlasterResId = R.drawable.line_blaster_magenta,
+        explosiveBombResId = R.drawable.bomb_magenta,
+        particleColorHex = 0xFFFF4081
+    )
 }
 
 enum class GamePiecePowerUp {
@@ -79,7 +105,15 @@ data class GamePiece(
     val powerUp: GamePiecePowerUp = GamePiecePowerUp.NONE,
     val id: String = UUID.randomUUID().toString(),
     val isEmpty: Boolean = false
-)
+) {
+    val activeDrawableResId: Int
+        get() = when (powerUp) {
+            GamePiecePowerUp.NONE -> type.drawableResId
+            GamePiecePowerUp.LINE_BLASTER -> type.lineBlasterResId
+            GamePiecePowerUp.EXPLOSIVE_BOMB -> type.explosiveBombResId
+            GamePiecePowerUp.COLOR_BOMB -> R.drawable.color_bomb
+        }
+}
 
 @Composable
 fun GamePieceItem(
@@ -194,7 +228,6 @@ fun GamePieceItem(
         }
     }
 
-    val isColorBomb = piece.powerUp == GamePiecePowerUp.COLOR_BOMB
     val hasPowerUp = piece.powerUp != GamePiecePowerUp.NONE
 
     Box(
@@ -220,61 +253,23 @@ fun GamePieceItem(
             ),
         contentAlignment = Alignment.Center
     ) {
-        if (isColorBomb) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(3.dp)
-                    .clip(CircleShape)
-                    .background(
-                        Brush.sweepGradient(
-                            listOf(
-                                Color(0xFFE53935),
-                                Color(0xFFFDD835),
-                                Color(0xFF43A047),
-                                Color(0xFF1E88E5),
-                                Color(0xFF8E24AA),
-                                Color(0xFFE53935)
-                            )
-                        )
-                    )
-                    .border(2.dp, Color(0xFFFFD700), CircleShape)
-            )
-        } else {
-            if (hasPowerUp || isSelected || isHinted) {
-                PowerUpGlow(
-                    glowColor = when {
-                        isSelected -> Color(0xFFFFEA00)
-                        isHinted -> Color(0xFF80D8FF)
-                        else -> Color(0xFFFFD700)
-                    }
-                )
-            }
-            Image(
-                painter = painterResource(id = piece.type.drawableResId),
-                contentDescription = piece.type.name,
-                contentScale = ContentScale.Fit,
-                colorFilter = hitFlashColorFilter,
-                modifier = Modifier.fillMaxSize()
+        if (hasPowerUp || isSelected || isHinted) {
+            PowerUpGlow(
+                glowColor = when {
+                    isSelected -> Color(0xFFFFEA00)
+                    isHinted -> Color(0xFF80D8FF)
+                    else -> Color(0xFFFFD700)
+                }
             )
         }
 
-        if (hasPowerUp) {
-            val icon = when (piece.powerUp) {
-                GamePiecePowerUp.LINE_BLASTER -> Icons.Default.FlashOn
-                GamePiecePowerUp.EXPLOSIVE_BOMB -> Icons.Default.Star
-                GamePiecePowerUp.COLOR_BOMB -> Icons.Default.AutoAwesome
-                else -> null
-            }
-            if (icon != null) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = piece.powerUp.name,
-                    tint = Color.White,
-                    modifier = Modifier.size(22.dp)
-                )
-            }
-        }
+        Image(
+            painter = painterResource(id = piece.activeDrawableResId),
+            contentDescription = if (hasPowerUp) "${piece.type.name}_${piece.powerUp.name}" else piece.type.name,
+            contentScale = ContentScale.Fit,
+            colorFilter = hitFlashColorFilter,
+            modifier = Modifier.fillMaxSize()
+        )
     }
 }
 
