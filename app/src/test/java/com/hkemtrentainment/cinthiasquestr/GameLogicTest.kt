@@ -31,7 +31,7 @@ class GameLogicTest {
         assertEquals(level25.targetScore, level99.targetScore)
         assertEquals(level25.moves, level99.moves)
         assertEquals(level25.boardShape, level99.boardShape)
-        assertTrue(level25.moves >= 12)
+        assertTrue(level25.moves >= 20)
     }
 
     @Test
@@ -39,6 +39,20 @@ class GameLogicTest {
         for (lvl in 1..WorldRepository.MAX_GAME_LEVELS) {
             val world = WorldRepository.getWorldForLevel(lvl)
             assertTrue(lvl in world.startLevel..world.endLevel)
+        }
+    }
+
+    @Test
+    fun `difficulty curve is balanced with generous moves and progressive targets`() {
+        var prevTarget = 0
+        for (lvl in 1..WorldRepository.MAX_GAME_LEVELS) {
+            val cfg = WorldRepository.getLevelConfig(lvl)
+            assertTrue("Level $lvl should grant at least 21 moves", cfg.moves in 21..28)
+            assertTrue("Level $lvl targetScore (${cfg.targetScore}) should progress smoothly", cfg.targetScore > prevTarget)
+            assertTrue("Level $lvl targetScore should not exceed 4800", cfg.targetScore <= 4800)
+            val pointsPerMoveRequired = cfg.targetScore.toFloat() / cfg.moves
+            assertTrue("Level $lvl points per move ($pointsPerMoveRequired) must be fair (<= 210)", pointsPerMoveRequired <= 210f)
+            prevTarget = cfg.targetScore
         }
     }
 
@@ -52,7 +66,6 @@ class GameLogicTest {
             }
             assertTrue("Shape ${shape.name} must have at least 40 playable cells", shape.activeCellCount >= 40)
 
-            // Cada celda activa debe pertenecer al menos a una línea horizontal o vertical de >= 3 celdas activas
             for (r in 0 until 8) {
                 for (c in 0 until 8) {
                     if (!shape.isCellActive(r, c)) continue
@@ -88,7 +101,7 @@ class GameLogicTest {
         for (lvl in 1..WorldRepository.MAX_GAME_LEVELS) {
             val cfg = WorldRepository.getLevelConfig(lvl)
             assertTrue(cfg.levelTitle.isNotBlank())
-            assertTrue(cfg.activePieceTypes.size in 5..6)
+            assertTrue(cfg.activePieceTypes.size in 4..6)
             for (relic in cfg.prePlacedRelics) {
                 assertTrue(
                     "Pre-placed relic at (${relic.row}, ${relic.col}) in level $lvl must be on an active cell",
@@ -144,19 +157,15 @@ class GameLogicTest {
     @Test
     fun `daily reward can only be claimed once per calendar day`() {
         val today = 20_000L
-        // Nunca reclamado antes (lastClaim = 0) -> permitido
         assertTrue(PlayerRepository.evaluateCanClaimDailyReward(today, 0L))
         assertEquals(1, PlayerRepository.computeNextDailyStreak(today, 0L, 1))
 
-        // Reclamado el mismo día (lastClaim = today) -> bloqueado (no reclamable infinitamente)
         assertFalse(PlayerRepository.evaluateCanClaimDailyReward(today, today))
         assertEquals(3, PlayerRepository.computeNextDailyStreak(today, today, 3))
 
-        // Reclamado ayer (lastClaim = today - 1) -> permitido y avanza racha
         assertTrue(PlayerRepository.evaluateCanClaimDailyReward(today, today - 1L))
         assertEquals(4, PlayerRepository.computeNextDailyStreak(today, today - 1L, 3))
 
-        // Si rompió la racha (hace 3 días) -> permitido pero reinicia a Día 1
         assertTrue(PlayerRepository.evaluateCanClaimDailyReward(today, today - 3L))
         assertEquals(1, PlayerRepository.computeNextDailyStreak(today, today - 3L, 5))
     }

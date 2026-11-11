@@ -47,8 +47,9 @@ data class PlayerData(
     val dailyLevelsCompleted: Int = 0,
     val dailyQuestsEpochDay: Long = 0L,
     val claimedDailyQuestsMask: Int = 0,
-    val starChestClaimedTier: Int = 0, // Cada 12 estrellas desbloquea un Cofre de Estrellas Real
-    // Accesibilidad y preferencias de Game Feel
+    val starChestClaimedTier: Int = 0, // Cada 10 estrellas desbloquea un Cofre de Estrellas Real
+    // Tutorial y Accesibilidad
+    val hasCompletedTutorial: Boolean = false,
     val soundEnabled: Boolean = true,
     val hapticsEnabled: Boolean = true,
     val reducedMotion: Boolean = false

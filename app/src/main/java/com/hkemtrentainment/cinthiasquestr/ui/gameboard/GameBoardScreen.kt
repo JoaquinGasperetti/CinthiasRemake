@@ -105,6 +105,7 @@ import com.hkemtrentainment.cinthiasquestr.ui.gameboard.components.GameTopBar
 import com.hkemtrentainment.cinthiasquestr.ui.gameboard.components.OutOfMovesDialog
 import com.hkemtrentainment.cinthiasquestr.ui.gameboard.components.PauseDialog
 import com.hkemtrentainment.cinthiasquestr.ui.gameboard.components.VictoryDialog
+import com.hkemtrentainment.cinthiasquestr.ui.tutorial.TutorialDialog
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -350,9 +351,10 @@ fun GameBoardScreen(
             modifier = Modifier.fillMaxSize()
         )
 
-        // Cinthia ajustada más arriba en la cornisa para ceder el máximo espacio vertical al tablero
-        val cinthiaSizeDp = totalHeight * 0.185f
-        val maxCinthiaWidth = totalWidth * 0.55f
+        // Sprite de Cinthia ampliado de forma prominente sobre la cornisa real (26.5% de la altura
+        // + zoom interno de 1.18x para compensar los márgenes transparentes del PNG)
+        val cinthiaSizeDp = totalHeight * 0.265f
+        val maxCinthiaWidth = totalWidth * 0.76f
         val finalCinthiaSize = minOf(cinthiaSizeDp, maxCinthiaWidth)
 
         Box(
@@ -361,7 +363,7 @@ fun GameBoardScreen(
                 .offset {
                     IntOffset(
                         x = 0,
-                        y = (totalHeightPx * 0.295f - with(currentDensity) { finalCinthiaSize.toPx() }).roundToInt()
+                        y = (totalHeightPx * 0.348f - with(currentDensity) { finalCinthiaSize.toPx() }).roundToInt()
                     )
                 },
             contentAlignment = Alignment.TopCenter
@@ -410,18 +412,16 @@ fun GameBoardScreen(
             val bottomBarTopHeight = totalHeight - innerPadding.calculateBottomPadding()
 
             Box(modifier = Modifier.fillMaxSize()) {
-                // Reducimos el margen lateral a 4.dp y subimos el tope del tablero para que el tablero
-                // y las gemas sean significativamente más grandes y fáciles de ver/tocar.
                 val boardPadding = 4.dp
                 val maxBoardWidth = totalWidth - boardPadding * 2
-                val maxBoardHeight = totalHeight * 0.72f
-                val minBoardTop = totalHeight * 0.308f
+                val maxBoardHeight = totalHeight * 0.68f
+                val minBoardTop = totalHeight * 0.340f
                 val safeBottomLimit = bottomBarTopHeight - 4.dp
                 val availableBoardHeight = (safeBottomLimit - minBoardTop).coerceAtLeast(240.dp)
                 val boardSize = minOf(maxBoardWidth, maxBoardHeight, availableBoardHeight)
 
-                // Centrar verticalmente el tablero en la franja disponible bajo la cornisa
-                val preferredBoardTop = minBoardTop + (availableBoardHeight - boardSize) * 0.35f
+                // Centrar verticalmente el tablero en la franja disponible bajo la cornisa de Cinthia
+                val preferredBoardTop = minBoardTop + (availableBoardHeight - boardSize) * 0.25f
 
                 val boardInset = boardSize * 0.018f
                 val cellSize = (boardSize - boardInset * 2f) / 8
@@ -429,41 +429,110 @@ fun GameBoardScreen(
                 val isSelectingBoosterTarget = gameState.boardState == BoardState.WAITING_FOR_BOOSTER_TARGET
                 val activeShape = gameState.boardShape
 
-                // Insignia compacta con el nombre del nivel y la forma del tablero sobre la cornisa
+                // Insignia lateral izquierda: Forma del tablero (ubicada al costado de Cinthia sin taparla)
                 Surface(
                     color = MedievalPalette.IronDark.copy(alpha = 0.90f),
                     shape = RoundedCornerShape(12.dp),
                     border = BorderStroke(1.2.dp, worldConfig.primaryColor.copy(alpha = 0.9f)),
                     modifier = Modifier
-                        .align(Alignment.TopCenter)
-                        .offset {
-                            IntOffset(
-                                x = 0,
-                                y = (preferredBoardTop - 26.dp).coerceAtLeast(innerPadding.calculateTopPadding() + 2.dp).roundToPx()
-                            )
-                        }
+                        .align(Alignment.TopStart)
+                        .padding(start = 8.dp, top = innerPadding.calculateTopPadding() + 6.dp)
                         .zIndex(2.5f)
                 ) {
                     Row(
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 3.dp),
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        horizontalArrangement = Arrangement.spacedBy(5.dp)
                     ) {
                         BoardShapeMiniBadge(
                             shape = activeShape,
                             accentColor = worldConfig.secondaryColor,
-                            size = 14.dp
+                            size = 13.dp
                         )
                         Text(
-                            text = if (gameState.levelTitle.isNotEmpty()) {
-                                "${gameState.levelTitle.uppercase()} · ${activeShape.displayName.uppercase()}"
-                            } else {
-                                activeShape.displayName.uppercase()
-                            },
+                            text = activeShape.displayName.uppercase(),
                             color = MedievalPalette.GoldBright,
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.Black
+                        )
+                    }
+                }
+
+                // Botón lateral derecho: Guía / Tutorial rápido ("? TUTORIAL")
+                Surface(
+                    color = MedievalPalette.IronDark.copy(alpha = 0.92f),
+                    shape = RoundedCornerShape(12.dp),
+                    border = BorderStroke(1.5.dp, MedievalPalette.GoldBright),
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(end = 8.dp, top = innerPadding.calculateTopPadding() + 6.dp)
+                        .zIndex(2.5f)
+                        .clickable {
+                            soundManager.play(GameSound.TILE_SELECT)
+                            viewModel.openTutorial()
+                        }
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(15.dp)
+                                .clip(CircleShape)
+                                .background(MedievalPalette.CobaltTop),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "?",
+                                color = Color.White,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Black
+                            )
+                        }
+                        Text(
+                            text = "GUÍA",
+                            color = Color(0xFFF6EAD4),
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.Black
+                        )
+                    }
+                }
+
+                // Coach interactivo en vivo durante el Nivel 1 para guiar al jugador nuevo en sus primeros movimientos
+                AnimatedVisibility(
+                    visible = gameState.level == 1 && gameState.tutorialCoachStep in 1..3 && !gameState.isGameOver,
+                    enter = fadeIn() + scaleIn(),
+                    exit = fadeOut() + scaleOut(),
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .offset {
+                            IntOffset(
+                                x = 0,
+                                y = (preferredBoardTop - 30.dp).coerceAtLeast(innerPadding.calculateTopPadding() + 30.dp).roundToPx()
+                            )
+                        }
+                        .zIndex(3.5f)
+                ) {
+                    val coachMessage = when (gameState.tutorialCoachStep) {
+                        1 -> "👆 Paso 1: Desliza o toca las 2 gemas iluminadas para combinar 3 iguales"
+                        2 -> "⚡ Paso 2: ¡Bien! Combina el Rayo o 4 gemas para arrasar filas enteras"
+                        else -> "🌟 Paso 3: ¡Casi ganas! Los movimientos sobrantes te darán Puntos Bonus"
+                    }
+                    Surface(
+                        color = MedievalPalette.IronDark.copy(alpha = 0.94f),
+                        shape = RoundedCornerShape(14.dp),
+                        border = BorderStroke(1.5.dp, Color(0xFF80D8FF)),
+                        shadowElevation = 6.dp
+                    ) {
+                        Text(
+                            text = coachMessage,
+                            color = Color.White,
                             fontSize = 10.sp,
-                            fontWeight = FontWeight.Black,
-                            letterSpacing = 0.6.sp
+                            fontWeight = FontWeight.ExtraBold,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
                         )
                     }
                 }
@@ -475,7 +544,7 @@ fun GameBoardScreen(
                     exit = fadeOut() + scaleOut(),
                     modifier = Modifier
                         .align(Alignment.TopCenter)
-                        .padding(top = innerPadding.calculateTopPadding() + 6.dp)
+                        .padding(top = innerPadding.calculateTopPadding() + 32.dp)
                         .zIndex(5f)
                 ) {
                     Surface(
@@ -589,9 +658,6 @@ fun GameBoardScreen(
                 ) {
                     val boardCellBitmap = ImageBitmap.imageResource(id = R.drawable.board_cell)
 
-                    // Renderizador de Tablero con Forma Personalizada:
-                    // Dibuja un marco contorneado de bronce y piedra únicamente alrededor de las casillas
-                    // activas de la forma del nivel, dejando transparentes los recortes exteriores o fosos.
                     Canvas(
                         modifier = Modifier
                             .fillMaxSize()
@@ -671,7 +737,6 @@ fun GameBoardScreen(
                                     dstSize = IntSize(cellW, cellH)
                                 )
 
-                                // Sutil alternancia tipo damero para que el ojo distinga columnas y filas al instante
                                 if ((r + c) % 2 == 0) {
                                     drawRect(
                                         color = Color.White.copy(alpha = 0.045f),
@@ -992,6 +1057,15 @@ fun GameBoardScreen(
             }
         }
 
+        if (gameState.showTutorialDialog) {
+            TutorialDialog(
+                onCompleteOrDismiss = {
+                    soundManager.play(GameSound.TILE_SELECT)
+                    viewModel.dismissTutorial()
+                }
+            )
+        }
+
         if (gameState.isGameWon) {
             VictoryDialog(
                 score = gameState.score,
@@ -1026,6 +1100,7 @@ fun GameBoardScreen(
                 onToggleSound = { viewModel.toggleSound(it) },
                 onToggleHaptics = { viewModel.toggleHaptics(it) },
                 onToggleReducedMotion = { viewModel.toggleReducedMotion(it) },
+                onOpenTutorialClick = { viewModel.openTutorial() },
                 onRestartClick = { viewModel.retryLevel() },
                 onResumeClick = { showPauseDialog = false },
                 onQuitClick = onWorldMapClick
@@ -1179,16 +1254,18 @@ fun CinthiaCharacter(
 
     val jumpDp = if (state == CinthiaState.CHEERING) (-18f * jumpPhase) else (-3f * jumpPhase)
 
-    val characterScaleX = if (state == CinthiaState.CHEERING) {
+    // Zoom de 1.18x sobre el sprite para eliminar el aire transparente del PNG y lucir a Cinthia grande y nítida
+    val baseZoom = 1.18f
+    val characterScaleX = baseZoom * (if (state == CinthiaState.CHEERING) {
         1f + 0.08f * (1f - jumpPhase)
     } else {
         1f + 0.02f * (1f - jumpPhase)
-    }
-    val characterScaleY = if (state == CinthiaState.CHEERING) {
+    })
+    val characterScaleY = baseZoom * (if (state == CinthiaState.CHEERING) {
         1f + 0.09f * jumpPhase
     } else {
         1f + 0.02f * jumpPhase
-    }
+    })
 
     val shake by infiniteTransition.animateFloat(
         initialValue = if (state == CinthiaState.WORRIED) -4.5f else 0f,
@@ -1209,6 +1286,24 @@ fun CinthiaCharacter(
     }
 
     Box(contentAlignment = Alignment.TopCenter) {
+        // Resplandor cálido de pedestal en la cornisa bajo los pies de Cinthia
+        Box(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .width(size * 0.72f)
+                .height(20.dp)
+                .offset(y = 4.dp)
+                .clip(CircleShape)
+                .background(
+                    Brush.radialGradient(
+                        colors = listOf(
+                            Color(0xFFFFD54F).copy(alpha = 0.28f),
+                            Color.Transparent
+                        )
+                    )
+                )
+        )
+
         Image(
             painter = painterResource(id = currentFrame),
             contentDescription = "Cinthia",
@@ -1230,7 +1325,7 @@ fun CinthiaCharacter(
             exit = fadeOut() + scaleOut(),
             modifier = Modifier
                 .align(Alignment.TopEnd)
-                .offset(x = 24.dp, y = (-6).dp)
+                .offset(x = 20.dp, y = 2.dp)
         ) {
             Box(
                 modifier = Modifier
@@ -1304,7 +1399,6 @@ fun BoosterItem(
             .clickable(onClick = onClick)
     ) {
         Box(contentAlignment = Alignment.Center) {
-            // Pedestal 3D de Hierro Forjado y Oro para el Booster (compactado a 50.dp para dar más espacio al tablero)
             Box(
                 modifier = Modifier
                     .size(50.dp)
@@ -1337,7 +1431,6 @@ fun BoosterItem(
                 )
             }
 
-            // Contador circular de unidades
             Box(
                 modifier = Modifier
                     .align(Alignment.TopEnd)
@@ -1357,7 +1450,6 @@ fun BoosterItem(
             }
         }
 
-        // Etiqueta diegética inferior con el nombre de la reliquia
         Surface(
             color = MedievalPalette.IronDark.copy(alpha = 0.92f),
             shape = RoundedCornerShape(8.dp),

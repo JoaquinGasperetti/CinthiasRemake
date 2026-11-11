@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Shield
@@ -50,6 +51,7 @@ fun PauseDialog(
     onToggleSound: (Boolean) -> Unit = {},
     onToggleHaptics: (Boolean) -> Unit = {},
     onToggleReducedMotion: (Boolean) -> Unit = {},
+    onOpenTutorialClick: () -> Unit = {},
     onRestartClick: () -> Unit = {},
     onResumeClick: () -> Unit,
     onQuitClick: () -> Unit
@@ -64,7 +66,7 @@ fun PauseDialog(
             Column(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -109,8 +111,6 @@ fun PauseDialog(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(2.dp))
-
                 ChunkyArcadeButton(
                     onClick = onResumeClick,
                     style = ArcadeButtonStyle.EMERALD_PLAY,
@@ -126,6 +126,27 @@ fun PauseDialog(
                         text = "CONTINUAR BATALLA",
                         fontWeight = FontWeight.Black,
                         fontSize = 14.sp
+                    )
+                }
+
+                ChunkyArcadeButton(
+                    onClick = {
+                        onResumeClick()
+                        onOpenTutorialClick()
+                    },
+                    style = ArcadeButtonStyle.COBALT_MAGIC,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Info,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "CÓMO JUGAR · TUTORIAL",
+                        fontWeight = FontWeight.Black,
+                        fontSize = 13.sp
                     )
                 }
 

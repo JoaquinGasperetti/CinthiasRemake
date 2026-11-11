@@ -98,6 +98,7 @@ import com.hkemtrentainment.cinthiasquestr.ui.components.StreakFlameIcon
 import com.hkemtrentainment.cinthiasquestr.ui.components.TorchEmbersOverlay
 import com.hkemtrentainment.cinthiasquestr.ui.components.TreasureChestIcon
 import com.hkemtrentainment.cinthiasquestr.ui.gameboard.BoosterType
+import com.hkemtrentainment.cinthiasquestr.ui.tutorial.TutorialDialog
 import kotlinx.coroutines.delay
 
 @Composable
@@ -241,6 +242,14 @@ fun MainMenuScreen(
                 }
             )
         }
+        ActiveHubModal.TUTORIAL_GUIDE -> {
+            TutorialDialog(
+                onCompleteOrDismiss = {
+                    soundManager.play(GameSound.TILE_DESELECT)
+                    viewModel.completeAndCloseTutorial()
+                }
+            )
+        }
         ActiveHubModal.NONE -> {}
     }
 
@@ -374,6 +383,19 @@ fun MainMenuScreen(
                         }
                     ) {
                         StreakFlameIcon(size = 30.dp)
+                    }
+
+                    SideDockActionButton(
+                        label = "Tutorial",
+                        progressText = if (!playerData.hasCompletedTutorial) "¡NUEVO!" else "Guía 6/6",
+                        hasAlert = !playerData.hasCompletedTutorial,
+                        accentColor = Color(0xFF4FC3F7),
+                        onClick = {
+                            soundManager.play(GameSound.TILE_SELECT)
+                            viewModel.openModal(ActiveHubModal.TUTORIAL_GUIDE)
+                        }
+                    ) {
+                        QuestScrollIcon(size = 28.dp)
                     }
                 }
 

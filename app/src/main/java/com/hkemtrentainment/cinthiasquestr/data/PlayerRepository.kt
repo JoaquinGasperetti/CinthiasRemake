@@ -37,6 +37,7 @@ class PlayerRepository(private val dataStore: DataStore<Preferences>) {
         val DAILY_QUESTS_DAY = longPreferencesKey("daily_quests_day")
         val CLAIMED_QUESTS_MASK = intPreferencesKey("claimed_quests_mask")
         val STAR_CHEST_TIER = intPreferencesKey("star_chest_tier")
+        val TUTORIAL_COMPLETED = booleanPreferencesKey("tutorial_completed")
         val SOUND_ENABLED = booleanPreferencesKey("sound_enabled")
         val HAPTICS_ENABLED = booleanPreferencesKey("haptics_enabled")
         val REDUCED_MOTION = booleanPreferencesKey("reduced_motion")
@@ -60,14 +61,19 @@ class PlayerRepository(private val dataStore: DataStore<Preferences>) {
             val savedDailyStreak = preferences[PreferencesKeys.DAILY_LOGIN_STREAK] ?: 1
             val canClaimToday = evaluateCanClaimDailyReward(today, lastClaimDay)
             val effectiveDailyStreak = computeNextDailyStreak(today, lastClaimDay, savedDailyStreak)
+            val starsMap = parseStars(preferences[PreferencesKeys.LEVEL_STARS])
+            val savedLevel = preferences[PreferencesKeys.LEVEL] ?: 1
+            // Si el jugador ya superó algún nivel previamente, damos por completado el tutorial inicial
+            val tutorialDone = preferences[PreferencesKeys.TUTORIAL_COMPLETED]
+                ?: (savedLevel > 1 || starsMap.isNotEmpty())
 
             PlayerData(
                 coins = preferences[PreferencesKeys.COINS] ?: 0,
-                level = preferences[PreferencesKeys.LEVEL] ?: 1,
+                level = savedLevel,
                 hammer = preferences[PreferencesKeys.HAMMER] ?: 1,
                 dynamite = preferences[PreferencesKeys.DYNAMITE] ?: 1,
                 shuffle = preferences[PreferencesKeys.SHUFFLE] ?: 1,
-                levelStars = parseStars(preferences[PreferencesKeys.LEVEL_STARS]),
+                levelStars = starsMap,
                 winStreak = preferences[PreferencesKeys.WIN_STREAK] ?: 0,
                 bestWinStreak = preferences[PreferencesKeys.BEST_WIN_STREAK] ?: 0,
                 dailyLoginStreak = effectiveDailyStreak,
@@ -79,11 +85,18 @@ class PlayerRepository(private val dataStore: DataStore<Preferences>) {
                 dailyQuestsEpochDay = today,
                 claimedDailyQuestsMask = if (isSameQuestDay) (preferences[PreferencesKeys.CLAIMED_QUESTS_MASK] ?: 0) else 0,
                 starChestClaimedTier = preferences[PreferencesKeys.STAR_CHEST_TIER] ?: 0,
+                hasCompletedTutorial = tutorialDone,
                 soundEnabled = preferences[PreferencesKeys.SOUND_ENABLED] ?: true,
                 hapticsEnabled = preferences[PreferencesKeys.HAPTICS_ENABLED] ?: true,
                 reducedMotion = preferences[PreferencesKeys.REDUCED_MOTION] ?: false
             )
         }
+
+    suspend fun markTutorialCompleted() {
+        dataStore.edit { preferences ->
+            preferences[PreferencesKeys.TUTORIAL_COMPLETED] = true
+        }
+    }
 
     suspend fun addCoins(amount: Int) {
         if (amount <= 0) return
@@ -208,6 +221,8 @@ class PlayerRepository(private val dataStore: DataStore<Preferences>) {
                 currentStarsMap[completedLevel] = starsEarned.coerceIn(1, 3)
                 preferences[PreferencesKeys.LEVEL_STARS] = formatStars(currentStarsMap)
             }
+
+            preferences[PreferencesKeys.TUTORIAL_COMPLETED] = true
 
             // Incrementar Racha de Victorias (Win Streak) y misión diaria de niveles
             val newStreak = (preferences[PreferencesKeys.WIN_STREAK] ?: 0) + 1
@@ -410,17 +425,10 @@ class PlayerRepository(private val dataStore: DataStore<Preferences>) {
                 .joinToString(",") { "${it.key}:${it.value}" }
         }
 
-        /**
-         * Determina si el jugador puede reclamar la recompensa diaria en el día `todayEpochDay`.
-         * Solo devuelve `true` si el último reclamo fue en un día estrictamente anterior.
-         */
         internal fun evaluateCanClaimDailyReward(todayEpochDay: Long, lastClaimEpochDay: Long): Boolean {
             return todayEpochDay > lastClaimEpochDay
         }
 
-        /**
-         * Calcula qué día de la racha (1..7) corresponde mostrar o reclamar hoy.
-         */
         internal fun computeNextDailyStreak(
             todayEpochDay: Long,
             lastClaimEpochDay: Long,
@@ -435,18 +443,11 @@ class PlayerRepository(private val dataStore: DataStore<Preferences>) {
             }
         }
 
-        /**
-         * Calcula la recompensa de monedas escalada por día de racha (Día 1..7).
-         */
         internal fun computeDailyStreakReward(streakDay: Int): Int {
             val clampedDay = streakDay.coerceIn(1, 7)
             return 150 + (clampedDay - 1) * 40
         }
 
-        /**
-         * Determina cuántos Power-Ups iniciales gratis recibe el jugador al empezar un nivel
-         * según su Racha de Victorias (Win Streak) actual (0..3 máx).
-         */
         internal fun computeStreakStarterPowerUpsCount(winStreak: Int): Int {
             return winStreak.coerceIn(0, 3)
         }

@@ -82,6 +82,8 @@ data class GameUIState(
     val winStreak: Int = 0,
     val streakStarterCount: Int = 0,
     val streakBannerText: String? = null,
+    val showTutorialDialog: Boolean = false,
+    val tutorialCoachStep: Int = 0,
     val soundEnabled: Boolean = true,
     val hapticsEnabled: Boolean = true,
     val reducedMotion: Boolean = false
@@ -155,6 +157,7 @@ class GameViewModel(
     }
     private var idleHintJob: Job? = null
     private var hasAppliedStreakBonusForSession = false
+    private var hasCheckedInitialTutorial = false
     private var streakAtRiskOnLoss: Int = 0
 
     init {
@@ -164,14 +167,36 @@ class GameViewModel(
                 levelTitle = levelConfig.levelTitle,
                 boardShape = levelConfig.boardShape,
                 targetScore = levelConfig.targetScore,
-                movesLeft = levelConfig.moves
+                movesLeft = levelConfig.moves,
+                tutorialCoachStep = if (safeLevel == 1) 1 else 0
             )
         }
 
         initializeBoard()
 
+        // En el Nivel 1 resaltamos de inmediato la primera jugada sugerida para guiar al jugador nuevo
+        if (safeLevel == 1) {
+            val initialHint = findBestHintMove()
+            if (initialHint != null) {
+                _uiState.update {
+                    it.copy(
+                        hintCells = setOf(initialHint.first, initialHint.second),
+                        cinthiaSpeech = "💡 ¡Desliza las gemas iluminadas!"
+                    )
+                }
+            }
+        }
+
         viewModelScope.launch {
             playerRepository.playerDataFlow.collect { playerData ->
+                val shouldAutoOpenTutorial = !hasCheckedInitialTutorial &&
+                    !playerData.hasCompletedTutorial &&
+                    safeLevel == 1
+
+                if (!hasCheckedInitialTutorial) {
+                    hasCheckedInitialTutorial = true
+                }
+
                 _uiState.update {
                     it.copy(
                         boosterInventory = mapOf(
@@ -185,6 +210,7 @@ class GameViewModel(
                         } else {
                             playerData.winStreak
                         },
+                        showTutorialDialog = if (shouldAutoOpenTutorial) true else it.showTutorialDialog,
                         soundEnabled = playerData.soundEnabled,
                         hapticsEnabled = playerData.hapticsEnabled,
                         reducedMotion = playerData.reducedMotion
@@ -201,6 +227,28 @@ class GameViewModel(
         }
 
         scheduleIdleHintTimer()
+    }
+
+    fun openTutorial() {
+        _uiState.update { it.copy(showTutorialDialog = true) }
+    }
+
+    fun dismissTutorial() {
+        _uiState.update { it.copy(showTutorialDialog = false) }
+        viewModelScope.launch {
+            playerRepository.markTutorialCompleted()
+        }
+        if (safeLevel == 1 && _uiState.value.score == 0) {
+            val hintPair = findBestHintMove()
+            if (hintPair != null) {
+                _uiState.update {
+                    it.copy(
+                        hintCells = setOf(hintPair.first, hintPair.second),
+                        cinthiaSpeech = "💡 ¡Combina las casillas brillantes!"
+                    )
+                }
+            }
+        }
     }
 
     internal fun isCellPlayable(r: Int, c: Int): Boolean {
@@ -785,8 +833,12 @@ class GameViewModel(
                 )
             )
 
-            // 7. Calcular puntos y lanzar Popup Flotante en el centroide del match
-            val points = finalDestructionSet.size * 10 * combo
+            // 7. Calcular puntos (20 pts base por gema + bonos por crear o detonar Power-Ups)
+            val baseGemPoints = finalDestructionSet.size * 20 * combo
+            val powerUpBonus = (if (powerUpTriggered) 80 * maxOf(1, triggeredPowerUps.size) else 0) +
+                (powerUpsToSpawn.size * 60)
+            val points = baseGemPoints + powerUpBonus
+
             val avgRow = if (finalDestructionSet.isNotEmpty()) {
                 finalDestructionSet.map { it.first }.average().toFloat()
             } else 3.5f
@@ -808,12 +860,21 @@ class GameViewModel(
             val shrinkingParticles = finalDestructionSet - powerUpPositions
 
             _uiState.update { state ->
+                val nextCoachStep = if (safeLevel == 1) {
+                    when {
+                        state.score + points >= state.targetScore * 0.7f -> 3
+                        state.tutorialCoachStep == 1 -> 2
+                        else -> state.tutorialCoachStep
+                    }
+                } else 0
+
                 state.copy(
                     boardState = BoardState.RESOLVING,
                     score = state.score + points,
                     lastMatchCombo = combo,
                     matchParticles = shrinkingParticles,
                     floatingPopups = (state.floatingPopups + popup).takeLast(5),
+                    tutorialCoachStep = nextCoachStep,
                     cinthiaState = if (combo >= 2 || powerUpTriggered) CinthiaState.CHEERING else state.cinthiaState,
                     cinthiaSpeech = calloutLabel ?: state.cinthiaSpeech
                 )
@@ -1265,6 +1326,7 @@ class GameViewModel(
                     boardState = BoardState.IDLE,
                     selectedCell = null,
                     hintCells = emptySet(),
+                    tutorialCoachStep = 0,
                     cinthiaState = CinthiaState.CHEERING,
                     cinthiaSpeech = "👑 ¡Victoria Real!",
                     earnedStars = stars,
@@ -1662,7 +1724,7 @@ class GameViewModel(
             )
         )
 
-        val points = finalDestructionSet.size * 15
+        val points = finalDestructionSet.size * 25 + (if (powerUpTriggered) 80 else 0)
         val center = coords.firstOrNull() ?: (3 to 3)
         val popup = FloatingScorePopup(
             row = center.first.toFloat(),

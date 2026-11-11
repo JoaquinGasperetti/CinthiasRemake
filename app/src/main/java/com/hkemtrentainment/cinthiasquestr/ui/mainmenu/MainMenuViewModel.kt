@@ -17,7 +17,8 @@ enum class ActiveHubModal {
     NONE,
     DAILY_CALENDAR,
     QUESTS_SCROLL,
-    STREAK_BLESSING
+    STREAK_BLESSING,
+    TUTORIAL_GUIDE
 }
 
 data class MainMenuUiState(
@@ -70,6 +71,13 @@ class MainMenuViewModel(private val playerRepository: PlayerRepository) : ViewMo
 
     fun closeModal() {
         _uiState.update { it.copy(activeModal = ActiveHubModal.NONE, questBannerMessage = null) }
+    }
+
+    fun completeAndCloseTutorial() {
+        _uiState.update { it.copy(activeModal = ActiveHubModal.NONE) }
+        viewModelScope.launch {
+            playerRepository.markTutorialCompleted()
+        }
     }
 
     fun cycleCinthiaDialogue() {
