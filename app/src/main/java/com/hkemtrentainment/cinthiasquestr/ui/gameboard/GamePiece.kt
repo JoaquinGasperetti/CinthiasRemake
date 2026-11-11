@@ -24,10 +24,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.ColorMatrix
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
@@ -104,7 +106,8 @@ data class GamePiece(
     val type: GamePieceType,
     val powerUp: GamePiecePowerUp = GamePiecePowerUp.NONE,
     val id: String = UUID.randomUUID().toString(),
-    val isEmpty: Boolean = false
+    val isEmpty: Boolean = false,
+    val isBlocked: Boolean = false
 ) {
     val activeDrawableResId: Int
         get() = when (powerUp) {
@@ -125,7 +128,10 @@ fun GamePieceItem(
     isHitFlash: Boolean = false,
     modifier: Modifier = Modifier
 ) {
-    if (piece.isEmpty) return
+    if (piece.isEmpty || piece.isBlocked) return
+
+    val hasPowerUp = piece.powerUp != GamePiecePowerUp.NONE
+    val baseVisualBoost = if (hasPowerUp) 1.10f else 1.06f
 
     // Squash & Stretch de entrada cuando se genera una nueva ficha
     val spawnSquash = remember(piece.id) { Animatable(0.72f) }
@@ -142,10 +148,10 @@ fun GamePieceItem(
     // Escala al hacer match (se infla ligeramente en el Hit-Flash y luego colapsa con rebote)
     val matchScale by animateFloatAsState(
         targetValue = when {
-            isHitFlash -> 1.24f
+            isHitFlash -> 1.26f
             isMatched -> 0f
-            isSelected -> 1.12f
-            else -> 1f
+            isSelected -> 1.15f
+            else -> baseVisualBoost
         },
         animationSpec = spring(
             dampingRatio = Spring.DampingRatioMediumBouncy,
@@ -228,17 +234,38 @@ fun GamePieceItem(
         }
     }
 
-    val hasPowerUp = piece.powerUp != GamePiecePowerUp.NONE
+    val gemAccentColor = remember(piece.type) { Color(piece.type.particleColorHex) }
 
     Box(
         modifier = modifier
-            .padding(2.dp)
+            .padding(0.5.dp)
             .graphicsLayer {
                 scaleX = matchScale * squashScaleX
                 scaleY = matchScale * squashScaleY
                 translationX = shakeOffsetX
                 translationY = hintOffsetY
                 rotationZ = if (isSelected) (pulsePhase - 0.5f) * 8f else 0f
+            }
+            .drawBehind {
+                // Sombra de contacto + micro-halo cromático para máxima separación visual de la celda
+                val r = size.minDimension * 0.44f
+                drawCircle(
+                    color = Color.Black.copy(alpha = 0.34f),
+                    radius = r,
+                    center = Offset(center.x, center.y + size.height * 0.04f)
+                )
+                drawCircle(
+                    brush = Brush.radialGradient(
+                        colors = listOf(
+                            gemAccentColor.copy(alpha = 0.22f),
+                            Color.Transparent
+                        ),
+                        center = center,
+                        radius = r * 1.08f
+                    ),
+                    radius = r * 1.08f,
+                    center = center
+                )
             }
             .then(
                 when {
@@ -255,9 +282,12 @@ fun GamePieceItem(
     ) {
         if (hasPowerUp || isSelected || isHinted) {
             PowerUpGlow(
+                powerUp = piece.powerUp,
                 glowColor = when {
                     isSelected -> Color(0xFFFFEA00)
                     isHinted -> Color(0xFF80D8FF)
+                    piece.powerUp == GamePiecePowerUp.COLOR_BOMB -> Color(0xFFE040FB)
+                    piece.powerUp == GamePiecePowerUp.LINE_BLASTER -> Color(0xFF40C4FF)
                     else -> Color(0xFFFFD700)
                 }
             )
@@ -275,13 +305,16 @@ fun GamePieceItem(
 
 /** Resplandor circular y pulsante detrás de las gemas con power-up, seleccionadas o sugeridas. */
 @Composable
-private fun PowerUpGlow(glowColor: Color = Color(0xFFFFD700)) {
+private fun PowerUpGlow(
+    powerUp: GamePiecePowerUp = GamePiecePowerUp.NONE,
+    glowColor: Color = Color(0xFFFFD700)
+) {
     val transition = rememberInfiniteTransition(label = "powerUpGlow")
     val glowAlpha by transition.animateFloat(
-        initialValue = 0.35f,
-        targetValue = 0.85f,
+        initialValue = 0.42f,
+        targetValue = 0.90f,
         animationSpec = infiniteRepeatable(
-            animation = tween(750, easing = FastOutSlowInEasing),
+            animation = tween(700, easing = FastOutSlowInEasing),
             repeatMode = RepeatMode.Reverse
         ),
         label = "glowAlpha"
@@ -290,7 +323,7 @@ private fun PowerUpGlow(glowColor: Color = Color(0xFFFFD700)) {
         modifier = Modifier
             .fillMaxSize()
             .drawBehind {
-                val radius = size.minDimension / 1.85f
+                val radius = size.minDimension / 1.75f
                 drawCircle(
                     brush = Brush.radialGradient(
                         colors = listOf(glowColor.copy(alpha = glowAlpha), Color.Transparent),
@@ -299,6 +332,28 @@ private fun PowerUpGlow(glowColor: Color = Color(0xFFFFD700)) {
                     ),
                     radius = radius
                 )
+                if (powerUp == GamePiecePowerUp.LINE_BLASTER) {
+                    // Destellos direccionales en cruz para identificar el Line Blaster al instante
+                    drawLine(
+                        color = Color.White.copy(alpha = glowAlpha * 0.75f),
+                        start = Offset(0f, center.y),
+                        end = Offset(size.width, center.y),
+                        strokeWidth = 2.5.dp.toPx()
+                    )
+                    drawLine(
+                        color = Color.White.copy(alpha = glowAlpha * 0.75f),
+                        start = Offset(center.x, 0f),
+                        end = Offset(center.x, size.height),
+                        strokeWidth = 2.5.dp.toPx()
+                    )
+                } else if (powerUp == GamePiecePowerUp.EXPLOSIVE_BOMB || powerUp == GamePiecePowerUp.COLOR_BOMB) {
+                    drawCircle(
+                        color = glowColor.copy(alpha = glowAlpha * 0.8f),
+                        radius = size.minDimension * 0.44f,
+                        center = center,
+                        style = Stroke(width = 2.dp.toPx())
+                    )
+                }
             }
     )
 }

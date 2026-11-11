@@ -70,7 +70,6 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -88,6 +87,7 @@ import com.hkemtrentainment.cinthiasquestr.ui.components.RoyalCrownIcon
 import com.hkemtrentainment.cinthiasquestr.ui.components.RoyalStarIcon
 import com.hkemtrentainment.cinthiasquestr.ui.components.StreakFlameIcon
 import com.hkemtrentainment.cinthiasquestr.ui.components.TorchEmbersOverlay
+import com.hkemtrentainment.cinthiasquestr.ui.gameboard.BoardShapeMiniBadge
 import com.hkemtrentainment.cinthiasquestr.ui.worldmap.components.LevelDetailDialog
 import kotlinx.coroutines.launch
 import kotlin.math.sin
@@ -164,6 +164,7 @@ fun WorldMapScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     val activeWorld = WorldRepository.getWorldForLevel(uiState.maxUnlockedLevel)
+                    val activeLevelConfig = WorldRepository.getLevelConfig(uiState.maxUnlockedLevel)
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
                             text = "FRENTE DE BATALLA ACTUAL",
@@ -173,9 +174,9 @@ fun WorldMapScreen(
                             letterSpacing = 1.sp
                         )
                         Text(
-                            text = "Nivel ${uiState.maxUnlockedLevel} · ${activeWorld.name}",
+                            text = "Nv.${uiState.maxUnlockedLevel} · ${activeLevelConfig.levelTitle} (${activeLevelConfig.boardShape.displayName})",
                             color = Color.White,
-                            fontSize = 14.sp,
+                            fontSize = 13.sp,
                             fontWeight = FontWeight.ExtraBold
                         )
                     }
@@ -404,7 +405,7 @@ fun WorldMapTopBar(
                         fontFamily = FontFamily.Serif
                     )
                     Text(
-                        text = "25 Niveles · 5 Regiones",
+                        text = "25 Niveles · 16 Formas de Tablero",
                         color = Color(0xFFD7CCC8),
                         fontSize = 10.sp,
                         fontWeight = FontWeight.SemiBold
@@ -722,6 +723,7 @@ fun LevelNodeItem(
     worldColor: Color,
     onClick: () -> Unit
 ) {
+    val levelConfig = remember(levelNumber) { WorldRepository.getLevelConfig(levelNumber) }
     val infiniteTransition = rememberInfiniteTransition(label = "nodePulse")
     val pulseScale by infiniteTransition.animateFloat(
         initialValue = 1f,
@@ -825,22 +827,22 @@ fun LevelNodeItem(
                 contentAlignment = Alignment.Center
             ) {
                 if (isUnlocked) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
                         Text(
                             text = "$levelNumber",
-                            fontSize = if (isBossNode) 22.sp else 20.sp,
+                            fontSize = if (isBossNode) 20.sp else 18.sp,
                             fontWeight = FontWeight.Black,
                             color = if (isCurrent) Color(0xFF2B180A) else Color.White,
                             fontFamily = FontFamily.Serif
                         )
-                        if (isBossNode) {
-                            Text(
-                                text = "JEFE",
-                                fontSize = 8.sp,
-                                fontWeight = FontWeight.Black,
-                                color = if (isCurrent) Color(0xFF2B180A) else MedievalPalette.GoldBright
-                            )
-                        }
+                        BoardShapeMiniBadge(
+                            shape = levelConfig.boardShape,
+                            accentColor = if (isCurrent) Color(0xFF2B180A) else MedievalPalette.GoldBright,
+                            size = 11.dp
+                        )
                     }
                 } else {
                     Icon(

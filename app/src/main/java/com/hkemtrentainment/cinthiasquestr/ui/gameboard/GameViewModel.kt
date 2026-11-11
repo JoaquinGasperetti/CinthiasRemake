@@ -5,6 +5,8 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.hkemtrentainment.cinthiasquestr.audio.GameSound
 import com.hkemtrentainment.cinthiasquestr.audio.SoundManager
+import com.hkemtrentainment.cinthiasquestr.data.BoardShape
+import com.hkemtrentainment.cinthiasquestr.data.LevelConfig
 import com.hkemtrentainment.cinthiasquestr.data.PlayerRepository
 import com.hkemtrentainment.cinthiasquestr.data.WorldRepository
 import kotlinx.coroutines.Job
@@ -52,6 +54,8 @@ data class ParticleBurstEvent(
 
 data class GameUIState(
     val grid: List<List<GamePiece>> = emptyList(),
+    val boardShape: BoardShape = BoardShape.CLASSIC_SQUARE,
+    val levelTitle: String = "",
     val score: Int = 0,
     val movesLeft: Int = 20,
     val boardState: BoardState = BoardState.IDLE,
@@ -130,6 +134,7 @@ class GameViewModel(
     val selectedLevel: Int = 1
 ) : ViewModel() {
     private val safeLevel = selectedLevel.coerceIn(1, WorldRepository.MAX_GAME_LEVELS)
+    private val levelConfig: LevelConfig = WorldRepository.getLevelConfig(safeLevel)
 
     private val _uiState = MutableStateFlow(GameUIState())
     val uiState: StateFlow<GameUIState> = _uiState.asStateFlow()
@@ -139,16 +144,25 @@ class GameViewModel(
     private val _effects = MutableSharedFlow<GameEffect>(extraBufferCapacity = 48)
     val effects: SharedFlow<GameEffect> = _effects.asSharedFlow()
 
-    private val logicalGrid = MutableList(8) { MutableList(8) { GamePiece(type = randomType()) } }
+    private val logicalGrid = MutableList(8) { r ->
+        MutableList(8) { c ->
+            if (levelConfig.isCellActive(r, c)) {
+                GamePiece(type = randomType())
+            } else {
+                blockedPiece(r, c)
+            }
+        }
+    }
     private var idleHintJob: Job? = null
     private var hasAppliedStreakBonusForSession = false
     private var streakAtRiskOnLoss: Int = 0
 
     init {
-        val levelConfig = WorldRepository.getLevelConfig(safeLevel)
         _uiState.update {
             it.copy(
                 level = safeLevel,
+                levelTitle = levelConfig.levelTitle,
+                boardShape = levelConfig.boardShape,
                 targetScore = levelConfig.targetScore,
                 movesLeft = levelConfig.moves
             )
@@ -189,16 +203,44 @@ class GameViewModel(
         scheduleIdleHintTimer()
     }
 
+    internal fun isCellPlayable(r: Int, c: Int): Boolean {
+        return r in 0..7 && c in 0..7 && levelConfig.isCellActive(r, c)
+    }
+
+    private fun blockedPiece(r: Int, c: Int): GamePiece = GamePiece(
+        type = GamePieceType.RED,
+        id = "BLOCKED_${r}_${c}",
+        isEmpty = true,
+        isBlocked = true
+    )
+
     private fun initializeBoard() {
         var attempts = 0
         do {
             attempts++
             for (r in 0 until 8) {
                 for (c in 0 until 8) {
-                    logicalGrid[r][c] = GamePiece(type = randomType())
+                    logicalGrid[r][c] = if (isCellPlayable(r, c)) {
+                        GamePiece(type = randomType())
+                    } else {
+                        blockedPiece(r, c)
+                    }
                 }
             }
-        } while ((findMatches().isNotEmpty() || !hasPossibleMoves()) && attempts < 40)
+        } while ((findMatches().isNotEmpty() || !hasPossibleMoves()) && attempts < 50)
+
+        // Colocar reliquias tácticas predefinidas del nivel en casillas activas
+        for (relic in levelConfig.prePlacedRelics) {
+            if (isCellPlayable(relic.row, relic.col)) {
+                val base = logicalGrid[relic.row][relic.col]
+                logicalGrid[relic.row][relic.col] = base.copy(
+                    powerUp = relic.powerUp,
+                    id = UUID.randomUUID().toString(),
+                    isEmpty = false,
+                    isBlocked = false
+                )
+            }
+        }
 
         syncUI()
     }
@@ -212,9 +254,12 @@ class GameViewModel(
         if (count <= 0) return
 
         val candidateCoords = mutableListOf<Pair<Int, Int>>()
-        for (r in 1..6) {
-            for (c in 1..6) {
-                if (logicalGrid[r][c].powerUp == GamePiecePowerUp.NONE) {
+        for (r in 0..7) {
+            for (c in 0..7) {
+                if (isCellPlayable(r, c) &&
+                    !logicalGrid[r][c].isEmpty &&
+                    logicalGrid[r][c].powerUp == GamePiecePowerUp.NONE
+                ) {
                     candidateCoords.add(r to c)
                 }
             }
@@ -304,7 +349,10 @@ class GameViewModel(
         }
     }
 
-    private fun randomType() = GamePieceType.entries.random()
+    private fun randomType(): GamePieceType {
+        val pool = levelConfig.activePieceTypes.ifEmpty { GamePieceType.entries }
+        return pool.random()
+    }
 
     private fun syncUI() {
         _uiState.update { it.copy(grid = logicalGrid.map { row -> row.toList() }) }
@@ -313,7 +361,7 @@ class GameViewModel(
     fun onSwipe(row: Int, col: Int, direction: SwipeDirection) {
         val state = _uiState.value
         if (state.boardState != BoardState.IDLE || state.isGameOver || state.isGameWon) return
-        if (row !in 0..7 || col !in 0..7) return
+        if (!isCellPlayable(row, col)) return
 
         val targetRow = when (direction) {
             SwipeDirection.UP -> row - 1
@@ -326,7 +374,7 @@ class GameViewModel(
             else -> col
         }
 
-        if (targetRow !in 0..7 || targetCol !in 0..7) return
+        if (!isCellPlayable(targetRow, targetCol)) return
 
         clearInteractionOverlays()
         viewModelScope.launch {
@@ -335,7 +383,9 @@ class GameViewModel(
     }
 
     private suspend fun processMove(r1: Int, c1: Int, r2: Int, c2: Int) {
-        if (logicalGrid[r1][c1].isEmpty || logicalGrid[r2][c2].isEmpty) {
+        if (!isCellPlayable(r1, c1) || !isCellPlayable(r2, c2) ||
+            logicalGrid[r1][c1].isEmpty || logicalGrid[r2][c2].isEmpty
+        ) {
             _uiState.update { it.copy(boardState = BoardState.IDLE) }
             return
         }
@@ -411,7 +461,8 @@ class GameViewModel(
     }
 
     /**
-     * Evalúa si el jugador intercambió un COLOR_BOMB con cualquier ficha o dos Power-Ups entre sí.
+     * Evalúa si el jugador intercambió un COLOR_BOMB con cualquier ficha o dos Power-Ups entre sí,
+     * filtrando siempre por las celdas activas de la forma del nivel.
      */
     private fun evaluateSpecialSwap(
         r1: Int,
@@ -421,12 +472,14 @@ class GameViewModel(
         c2: Int,
         p2: GamePiece
     ): Set<Pair<Int, Int>> {
-        // Doble Color Bomb: limpia todo el tablero 8x8
+        // Doble Color Bomb: limpia todas las celdas jugables del tablero
         if (p1.powerUp == GamePiecePowerUp.COLOR_BOMB && p2.powerUp == GamePiecePowerUp.COLOR_BOMB) {
             val allCoords = mutableSetOf<Pair<Int, Int>>()
             for (r in 0 until 8) {
                 for (c in 0 until 8) {
-                    allCoords.add(r to c)
+                    if (isCellPlayable(r, c)) {
+                        allCoords.add(r to c)
+                    }
                 }
             }
             return allCoords
@@ -439,19 +492,19 @@ class GameViewModel(
             val affected = mutableSetOf(r1 to c1, r2 to c2)
             for (r in 0 until 8) {
                 for (c in 0 until 8) {
+                    if (!isCellPlayable(r, c)) continue
                     val cellPiece = logicalGrid[r][c]
                     if (!cellPiece.isEmpty && cellPiece.powerUp != GamePiecePowerUp.COLOR_BOMB && cellPiece.type == targetType) {
                         affected.add(r to c)
-                        // Si la otra ficha también era un Power-Up (Bomb o Line Blaster), propaga su efecto en cada gema de ese color
                         if (other.powerUp == GamePiecePowerUp.LINE_BLASTER) {
                             for (i in 0 until 8) {
-                                affected.add(r to i)
-                                affected.add(i to c)
+                                if (isCellPlayable(r, i)) affected.add(r to i)
+                                if (isCellPlayable(i, c)) affected.add(i to c)
                             }
                         } else if (other.powerUp == GamePiecePowerUp.EXPLOSIVE_BOMB) {
                             for (dr in -1..1) {
                                 for (dc in -1..1) {
-                                    if (r + dr in 0..7 && c + dc in 0..7) {
+                                    if (isCellPlayable(r + dr, c + dc)) {
                                         affected.add((r + dr) to (c + dc))
                                     }
                                 }
@@ -463,20 +516,20 @@ class GameViewModel(
             return affected
         }
 
-        // Dos Explosive Bombs intercambiadas: Mega Explosión de 5x5
+        // Dos Explosive Bombs intercambiadas: Mega Explosión de 5x5 sobre celdas jugables
         if (p1.powerUp == GamePiecePowerUp.EXPLOSIVE_BOMB && p2.powerUp == GamePiecePowerUp.EXPLOSIVE_BOMB) {
             val affected = mutableSetOf<Pair<Int, Int>>()
             for (dr in -2..2) {
                 for (dc in -2..2) {
                     val nr = r2 + dr
                     val nc = c2 + dc
-                    if (nr in 0..7 && nc in 0..7) affected.add(nr to nc)
+                    if (isCellPlayable(nr, nc)) affected.add(nr to nc)
                 }
             }
             return affected
         }
 
-        // Line Blaster + Explosive Bomb: Super Cruz de 3 filas y 3 columnas
+        // Line Blaster + Explosive Bomb: Super Cruz de 3 filas y 3 columnas sobre celdas jugables
         if ((p1.powerUp == GamePiecePowerUp.LINE_BLASTER && p2.powerUp == GamePiecePowerUp.EXPLOSIVE_BOMB) ||
             (p1.powerUp == GamePiecePowerUp.EXPLOSIVE_BOMB && p2.powerUp == GamePiecePowerUp.LINE_BLASTER)
         ) {
@@ -485,8 +538,8 @@ class GameViewModel(
                 val targetR = (r2 + d).coerceIn(0, 7)
                 val targetC = (c2 + d).coerceIn(0, 7)
                 for (i in 0 until 8) {
-                    affected.add(targetR to i)
-                    affected.add(i to targetC)
+                    if (isCellPlayable(targetR, i)) affected.add(targetR to i)
+                    if (isCellPlayable(i, targetC)) affected.add(i to targetC)
                 }
             }
             return affected
@@ -512,6 +565,7 @@ class GameViewModel(
         val counts = mutableMapOf<GamePieceType, Int>()
         for (r in 0 until 8) {
             for (c in 0 until 8) {
+                if (!isCellPlayable(r, c)) continue
                 val p = logicalGrid[r][c]
                 if (!p.isEmpty && p.powerUp != GamePiecePowerUp.COLOR_BOMB) {
                     counts[p.type] = (counts[p.type] ?: 0) + 1
@@ -525,9 +579,10 @@ class GameViewModel(
         seedCoords: Set<Pair<Int, Int>>,
         preProcessedCoords: Set<Pair<Int, Int>> = emptySet()
     ): ExpandedDestruction {
-        val finalDestructionSet = seedCoords.toMutableSet()
+        val playableSeeds = seedCoords.filter { isCellPlayable(it.first, it.second) }.toSet()
+        val finalDestructionSet = playableSeeds.toMutableSet()
         val queue = ArrayDeque<Pair<Int, Int>>()
-        queue.addAll(seedCoords)
+        queue.addAll(playableSeeds)
         val processedPowerUps = preProcessedCoords.toMutableSet()
         val triggeredPowerUps = mutableSetOf<GamePiecePowerUp>()
         val shockwaveCenters = mutableListOf<Pair<Int, Int>>()
@@ -536,6 +591,7 @@ class GameViewModel(
 
         // Registrar los power-ups que ya venían pre-procesados por un Special Swap
         for (coord in preProcessedCoords) {
+            if (!isCellPlayable(coord.first, coord.second)) continue
             val p = logicalGrid[coord.first][coord.second]
             if (!p.isEmpty && p.powerUp != GamePiecePowerUp.NONE) {
                 triggeredPowerUps.add(p.powerUp)
@@ -549,6 +605,7 @@ class GameViewModel(
 
         while (queue.isNotEmpty()) {
             val coord = queue.poll() ?: continue
+            if (!isCellPlayable(coord.first, coord.second)) continue
             val piece = logicalGrid[coord.first][coord.second]
             if (!piece.isEmpty && piece.powerUp != GamePiecePowerUp.NONE && coord !in processedPowerUps) {
                 processedPowerUps.add(coord)
@@ -560,8 +617,12 @@ class GameViewModel(
                         blasterRows.add(coord.first)
                         blasterCols.add(coord.second)
                         for (i in 0 until 8) {
-                            if (finalDestructionSet.add(coord.first to i)) queue.add(coord.first to i)
-                            if (finalDestructionSet.add(i to coord.second)) queue.add(i to coord.second)
+                            if (isCellPlayable(coord.first, i) && finalDestructionSet.add(coord.first to i)) {
+                                queue.add(coord.first to i)
+                            }
+                            if (isCellPlayable(i, coord.second) && finalDestructionSet.add(i to coord.second)) {
+                                queue.add(i to coord.second)
+                            }
                         }
                     }
                     GamePiecePowerUp.EXPLOSIVE_BOMB -> {
@@ -569,7 +630,7 @@ class GameViewModel(
                             for (dc in -1..1) {
                                 val nr = coord.first + dr
                                 val nc = coord.second + dc
-                                if (nr in 0..7 && nc in 0..7) {
+                                if (isCellPlayable(nr, nc)) {
                                     if (finalDestructionSet.add(nr to nc)) queue.add(nr to nc)
                                 }
                             }
@@ -579,6 +640,7 @@ class GameViewModel(
                         val targetType = mostCommonBoardType()
                         for (r in 0 until 8) {
                             for (c in 0 until 8) {
+                                if (!isCellPlayable(r, c)) continue
                                 val cellPiece = logicalGrid[r][c]
                                 if (!cellPiece.isEmpty && cellPiece.powerUp != GamePiecePowerUp.COLOR_BOMB && cellPiece.type == targetType) {
                                     if (finalDestructionSet.add(r to c)) queue.add(r to c)
@@ -638,7 +700,9 @@ class GameViewModel(
                         } else {
                             matchSet.first()
                         }
-                        powerUpsToSpawn.add(Triple(spawnPos.first, spawnPos.second, powerUp))
+                        if (isCellPlayable(spawnPos.first, spawnPos.second)) {
+                            powerUpsToSpawn.add(Triple(spawnPos.first, spawnPos.second, powerUp))
+                        }
                     }
                 }
             }
@@ -723,8 +787,12 @@ class GameViewModel(
 
             // 7. Calcular puntos y lanzar Popup Flotante en el centroide del match
             val points = finalDestructionSet.size * 10 * combo
-            val avgRow = finalDestructionSet.map { it.first }.average().toFloat()
-            val avgCol = finalDestructionSet.map { it.second }.average().toFloat()
+            val avgRow = if (finalDestructionSet.isNotEmpty()) {
+                finalDestructionSet.map { it.first }.average().toFloat()
+            } else 3.5f
+            val avgCol = if (finalDestructionSet.isNotEmpty()) {
+                finalDestructionSet.map { it.second }.average().toFloat()
+            } else 3.5f
             val dominantColor = cellColorMap.values.firstOrNull() ?: 0xFFFFD700L
 
             val popup = FloatingScorePopup(
@@ -768,7 +836,7 @@ class GameViewModel(
             _uiState.update { it.copy(matchParticles = emptySet()) }
 
             for (coord in finalDestructionSet) {
-                if (coord !in powerUpPositions) {
+                if (coord !in powerUpPositions && isCellPlayable(coord.first, coord.second)) {
                     logicalGrid[coord.first][coord.second] = GamePiece(
                         type = randomType(),
                         id = "EMPTY_${UUID.randomUUID()}",
@@ -778,12 +846,15 @@ class GameViewModel(
             }
 
             for (p in powerUpsToSpawn) {
-                val basePiece = logicalGrid[p.first][p.second]
-                logicalGrid[p.first][p.second] = basePiece.copy(
-                    powerUp = p.third,
-                    id = UUID.randomUUID().toString(),
-                    isEmpty = false
-                )
+                if (isCellPlayable(p.first, p.second)) {
+                    val basePiece = logicalGrid[p.first][p.second]
+                    logicalGrid[p.first][p.second] = basePiece.copy(
+                        powerUp = p.third,
+                        id = UUID.randomUUID().toString(),
+                        isEmpty = false,
+                        isBlocked = false
+                    )
+                }
             }
 
             _uiState.update { it.copy(boardState = BoardState.DROPPING) }
@@ -894,20 +965,31 @@ class GameViewModel(
         return GamePiecePowerUp.NONE
     }
 
+    /**
+     * Aplica gravedad vertical sobre las casillas activas de cada columna, permitiendo que las gemas
+     * atraviesen fosos o puentes intermedios y preservando intactos los huecos de la forma del nivel.
+     */
     private fun applyGravity() {
         for (c in 0 until 8) {
-            val column = mutableListOf<GamePiece>()
-            for (r in 7 downTo 0) {
+            val playableRowsDesc = (7 downTo 0).filter { r -> isCellPlayable(r, c) }
+            val survivingPieces = mutableListOf<GamePiece>()
+            for (r in playableRowsDesc) {
                 val piece = logicalGrid[r][c]
-                if (!piece.isEmpty && !piece.id.startsWith("EMPTY")) {
-                    column.add(piece)
+                if (!piece.isEmpty && !piece.isBlocked && !piece.id.startsWith("EMPTY")) {
+                    survivingPieces.add(piece)
                 }
             }
-            while (column.size < 8) {
-                column.add(GamePiece(type = randomType()))
+            while (survivingPieces.size < playableRowsDesc.size) {
+                survivingPieces.add(GamePiece(type = randomType()))
+            }
+            for (idx in playableRowsDesc.indices) {
+                val targetRow = playableRowsDesc[idx]
+                logicalGrid[targetRow][c] = survivingPieces[idx]
             }
             for (r in 0 until 8) {
-                logicalGrid[7 - r][c] = column[r]
+                if (!isCellPlayable(r, c)) {
+                    logicalGrid[r][c] = blockedPiece(r, c)
+                }
             }
         }
     }
@@ -918,14 +1000,20 @@ class GameViewModel(
             var c = 0
             while (c < 8) {
                 val startPiece = logicalGrid[r][c]
-                if (startPiece.isEmpty || startPiece.id.startsWith("EMPTY") || startPiece.powerUp == GamePiecePowerUp.COLOR_BOMB) {
+                if (!isCellPlayable(r, c) ||
+                    startPiece.isEmpty ||
+                    startPiece.isBlocked ||
+                    startPiece.id.startsWith("EMPTY") ||
+                    startPiece.powerUp == GamePiecePowerUp.COLOR_BOMB
+                ) {
                     c++
                     continue
                 }
                 var count = 1
-                while (c + count < 8) {
+                while (c + count < 8 && isCellPlayable(r, c + count)) {
                     val nextPiece = logicalGrid[r][c + count]
                     if (!nextPiece.isEmpty &&
+                        !nextPiece.isBlocked &&
                         !nextPiece.id.startsWith("EMPTY") &&
                         nextPiece.powerUp != GamePiecePowerUp.COLOR_BOMB &&
                         nextPiece.type == startPiece.type
@@ -949,14 +1037,20 @@ class GameViewModel(
             var r = 0
             while (r < 8) {
                 val startPiece = logicalGrid[r][c]
-                if (startPiece.isEmpty || startPiece.id.startsWith("EMPTY") || startPiece.powerUp == GamePiecePowerUp.COLOR_BOMB) {
+                if (!isCellPlayable(r, c) ||
+                    startPiece.isEmpty ||
+                    startPiece.isBlocked ||
+                    startPiece.id.startsWith("EMPTY") ||
+                    startPiece.powerUp == GamePiecePowerUp.COLOR_BOMB
+                ) {
                     r++
                     continue
                 }
                 var count = 1
-                while (r + count < 8) {
+                while (r + count < 8 && isCellPlayable(r + count, c)) {
                     val nextPiece = logicalGrid[r + count][c]
                     if (!nextPiece.isEmpty &&
+                        !nextPiece.isBlocked &&
                         !nextPiece.id.startsWith("EMPTY") &&
                         nextPiece.powerUp != GamePiecePowerUp.COLOR_BOMB &&
                         nextPiece.type == startPiece.type
@@ -1007,9 +1101,10 @@ class GameViewModel(
 
         for (r in 0 until 8) {
             for (c in 0 until 8) {
+                if (!isCellPlayable(r, c)) continue
                 val neighbors = listOfNotNull(
-                    if (c + 1 < 8) r to (c + 1) else null,
-                    if (r + 1 < 8) (r + 1) to c else null
+                    if (c + 1 < 8 && isCellPlayable(r, c + 1)) r to (c + 1) else null,
+                    if (r + 1 < 8 && isCellPlayable(r + 1, c)) (r + 1) to c else null
                 )
                 for ((nr, nc) in neighbors) {
                     val weight = evaluateSwapWeight(r, c, nr, nc)
@@ -1024,9 +1119,10 @@ class GameViewModel(
     }
 
     private fun evaluateSwapWeight(r1: Int, c1: Int, r2: Int, c2: Int): Int {
+        if (!isCellPlayable(r1, c1) || !isCellPlayable(r2, c2)) return 0
         val p1 = logicalGrid[r1][c1]
         val p2 = logicalGrid[r2][c2]
-        if (p1.isEmpty || p2.isEmpty) return 0
+        if (p1.isEmpty || p2.isEmpty || p1.isBlocked || p2.isBlocked) return 0
 
         if (p1.powerUp == GamePiecePowerUp.COLOR_BOMB || p2.powerUp == GamePiecePowerUp.COLOR_BOMB) {
             return 100
@@ -1056,26 +1152,32 @@ class GameViewModel(
         }
         delay(420)
 
+        val playableCoords = mutableListOf<Pair<Int, Int>>()
+        for (r in 0 until 8) {
+            for (c in 0 until 8) {
+                if (isCellPlayable(r, c)) {
+                    playableCoords.add(r to c)
+                }
+            }
+        }
+
         var attempts = 0
         do {
             attempts++
             if (attempts <= 25) {
-                val pieces = logicalGrid.flatten().shuffled().toMutableList()
-                for (r in 0 until 8) {
-                    for (c in 0 until 8) {
-                        logicalGrid[r][c] = pieces.removeAt(0)
-                    }
+                val pieces = playableCoords.map { (r, c) -> logicalGrid[r][c] }.shuffled()
+                for (i in playableCoords.indices) {
+                    val (r, c) = playableCoords[i]
+                    logicalGrid[r][c] = pieces[i]
                 }
             } else {
                 // Fallback seguro si los colores actuales no permiten jugada sin match inicial
-                for (r in 0 until 8) {
-                    for (c in 0 until 8) {
-                        val existingPowerUp = logicalGrid[r][c].powerUp
-                        logicalGrid[r][c] = GamePiece(
-                            type = randomType(),
-                            powerUp = existingPowerUp
-                        )
-                    }
+                for ((r, c) in playableCoords) {
+                    val existingPowerUp = logicalGrid[r][c].powerUp
+                    logicalGrid[r][c] = GamePiece(
+                        type = randomType(),
+                        powerUp = existingPowerUp
+                    )
                 }
             }
         } while ((findMatches().isNotEmpty() || !hasPossibleMoves()) && attempts < 50)
@@ -1088,6 +1190,13 @@ class GameViewModel(
         val currentState = _uiState.value
         if (currentState.score >= currentState.targetScore && !currentState.isGameWon) {
             idleHintJob?.cancel()
+
+            val playableCoords = mutableListOf<Pair<Int, Int>>()
+            for (r in 0 until 8) {
+                for (c in 0 until 8) {
+                    if (isCellPlayable(r, c)) playableCoords.add(r to c)
+                }
+            }
 
             // BONUS FINALE: Convertir movimientos restantes en puntos extra con celebración jugosa
             var bonusScore = 0
@@ -1107,8 +1216,11 @@ class GameViewModel(
                     _effects.emit(GameEffect.PlaySound(GameSound.MATCH_SUCCESS_GEM, rate = pitch, volume = 0.75f))
                     _effects.emit(GameEffect.SwipeHaptic)
 
-                    val randomRow = (1..6).random()
-                    val randomCol = (1..6).random()
+                    val (randomRow, randomCol) = if (playableCoords.isNotEmpty()) {
+                        playableCoords.random()
+                    } else {
+                        3 to 3
+                    }
                     val popup = FloatingScorePopup(
                         row = randomRow.toFloat(),
                         col = randomCol.toFloat(),
@@ -1294,7 +1406,6 @@ class GameViewModel(
         streakAtRiskOnLoss = 0
         viewModelScope.launch {
             playerRepository.resetWinStreak()
-            val levelConfig = WorldRepository.getLevelConfig(safeLevel)
             initializeBoard()
             _uiState.update {
                 it.copy(
@@ -1403,10 +1514,10 @@ class GameViewModel(
      * para maximizar la precisión y responsividad táctil (Real-Time Control de Steve Swink).
      */
     fun onPieceTapped(row: Int, col: Int) {
-        if (row !in 0..7 || col !in 0..7) return
+        if (!isCellPlayable(row, col)) return
         val state = _uiState.value
         if (state.isGameWon || state.isGameOver) return
-        if (logicalGrid[row][col].isEmpty) return
+        if (logicalGrid[row][col].isEmpty || logicalGrid[row][col].isBlocked) return
 
         // Caso 1: Aplicar Booster activo sobre la celda tocada
         if (state.boardState == BoardState.WAITING_FOR_BOOSTER_TARGET && state.activeBooster != null) {
@@ -1418,12 +1529,12 @@ class GameViewModel(
                 val affected = mutableSetOf<Pair<Int, Int>>()
                 when (booster) {
                     BoosterType.HAMMER -> {
-                        affected.add(row to col)
+                        if (isCellPlayable(row, col)) affected.add(row to col)
                     }
                     BoosterType.DYNAMITE -> {
                         for (r in (row - 1)..(row + 1)) {
                             for (c in (col - 1)..(col + 1)) {
-                                if (r in 0..7 && c in 0..7) affected.add(r to c)
+                                if (isCellPlayable(r, c)) affected.add(r to c)
                             }
                         }
                     }
@@ -1592,11 +1703,13 @@ class GameViewModel(
         _uiState.update { it.copy(matchParticles = emptySet()) }
 
         for (coord in finalDestructionSet) {
-            logicalGrid[coord.first][coord.second] = GamePiece(
-                type = randomType(),
-                id = "EMPTY_${UUID.randomUUID()}",
-                isEmpty = true
-            )
+            if (isCellPlayable(coord.first, coord.second)) {
+                logicalGrid[coord.first][coord.second] = GamePiece(
+                    type = randomType(),
+                    id = "EMPTY_${UUID.randomUUID()}",
+                    isEmpty = true
+                )
+            }
         }
 
         _uiState.update { it.copy(boardState = BoardState.DROPPING) }

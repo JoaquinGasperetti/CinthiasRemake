@@ -1,8 +1,10 @@
 package com.hkemtrentainment.cinthiasquestr.ui.worldmap.components
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -27,16 +29,21 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import com.hkemtrentainment.cinthiasquestr.R
+import com.hkemtrentainment.cinthiasquestr.data.BoardShape
 import com.hkemtrentainment.cinthiasquestr.data.PlayerRepository
 import com.hkemtrentainment.cinthiasquestr.data.WorldRepository
 import com.hkemtrentainment.cinthiasquestr.ui.components.ArcadeButtonStyle
@@ -128,17 +135,18 @@ fun LevelDetailDialog(
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(6.dp))
+                    Spacer(modifier = Modifier.height(4.dp))
 
                     Text(
-                        text = "NIVEL $levelNumber",
-                        fontSize = 26.sp,
+                        text = "NIVEL $levelNumber · ${levelConfig.levelTitle.uppercase()}",
+                        fontSize = 20.sp,
                         fontWeight = FontWeight.Black,
                         color = Color.White,
-                        fontFamily = FontFamily.Serif
+                        fontFamily = FontFamily.Serif,
+                        textAlign = TextAlign.Center
                     )
 
-                    Spacer(modifier = Modifier.height(8.dp))
+                    Spacer(modifier = Modifier.height(6.dp))
 
                     // Estrellas del Nivel con Emblemas Facetados
                     Row(
@@ -147,7 +155,7 @@ fun LevelDetailDialog(
                     ) {
                         repeat(3) { index ->
                             val isEarned = index < starsEarned
-                            val starSize = if (index == 1) 42.dp else 32.dp
+                            val starSize = if (index == 1) 38.dp else 28.dp
                             RoyalStarIcon(
                                 filled = isEarned,
                                 size = starSize
@@ -160,67 +168,104 @@ fun LevelDetailDialog(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(18.dp),
+                    .padding(16.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                // Objetivo de Puntos y Límite de Movimientos en Placas de Hierro Forjado
+                // Objetivo de Puntos, Límite de Movimientos y Vista Previa de la Forma del Tablero
                 ForgedIronPanel(
                     modifier = Modifier.fillMaxWidth(),
                     cornerRadius = 16.dp,
                     trimColor = MedievalPalette.BrassFrame,
                     contentPadding = PaddingValues(12.dp)
                 ) {
-                    Row(
+                    Column(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceEvenly,
-                        verticalAlignment = Alignment.CenterVertically
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text(
-                                text = "META REAL",
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.ExtraBold,
-                                color = Color(0xFFD7CCC8)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceEvenly,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text(
+                                    text = "META REAL",
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = Color(0xFFD7CCC8)
+                                )
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Image(
+                                        painter = painterResource(id = R.drawable.gem_red),
+                                        contentDescription = null,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Text(
+                                        text = "${levelConfig.targetScore} pts",
+                                        fontSize = 17.sp,
+                                        fontWeight = FontWeight.Black,
+                                        color = MedievalPalette.GoldBright
+                                    )
+                                }
+                            }
+
+                            Box(
+                                modifier = Modifier
+                                    .width(1.5.dp)
+                                    .height(34.dp)
+                                    .background(MedievalPalette.BrassFrame.copy(alpha = 0.6f))
                             )
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
-                            ) {
-                                Image(
-                                    painter = painterResource(id = R.drawable.gem_red),
-                                    contentDescription = null,
-                                    modifier = Modifier.size(18.dp)
+
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text(
+                                    text = "MOVIMIENTOS",
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = Color(0xFFD7CCC8)
                                 )
                                 Text(
-                                    text = "${levelConfig.targetScore} pts",
-                                    fontSize = 18.sp,
+                                    text = "${levelConfig.moves}",
+                                    fontSize = 17.sp,
                                     fontWeight = FontWeight.Black,
-                                    color = MedievalPalette.GoldBright
+                                    color = Color.White
                                 )
                             }
                         }
 
-                        Box(
+                        // Mini-mapa de la silueta del tablero para este nivel
+                        Row(
                             modifier = Modifier
-                                .width(1.5.dp)
-                                .height(34.dp)
-                                .background(MedievalPalette.BrassFrame.copy(alpha = 0.6f))
-                        )
-
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text(
-                                text = "MOVIMIENTOS",
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.ExtraBold,
-                                color = Color(0xFFD7CCC8)
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(Color.Black.copy(alpha = 0.35f))
+                                .border(1.dp, MedievalPalette.BrassFrame.copy(alpha = 0.6f), RoundedCornerShape(12.dp))
+                                .padding(horizontal = 12.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            BoardShapePreviewGrid(
+                                shape = levelConfig.boardShape,
+                                primaryColor = world.secondaryColor,
+                                size = 46.dp
                             )
-                            Text(
-                                text = "${levelConfig.moves}",
-                                fontSize = 18.sp,
-                                fontWeight = FontWeight.Black,
-                                color = Color.White
-                            )
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "FORMA: ${levelConfig.boardShape.displayName.uppercase()}",
+                                    color = MedievalPalette.GoldBright,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Black
+                                )
+                                Text(
+                                    text = "${levelConfig.boardShape.subtitle} (${levelConfig.boardShape.activeCellCount} casillas · ${levelConfig.activePieceTypes.size} colores)",
+                                    color = Color(0xFFE0D0B8),
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
                         }
                     }
                 }
@@ -321,6 +366,40 @@ fun LevelDetailDialog(
                         fontSize = 18.sp,
                         fontWeight = FontWeight.Black,
                         fontFamily = FontFamily.Serif
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun BoardShapePreviewGrid(
+    shape: BoardShape,
+    primaryColor: Color,
+    size: Dp = 46.dp,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier
+            .size(size)
+            .clip(RoundedCornerShape(8.dp))
+            .background(Color(0xFF1A1215))
+            .border(1.5.dp, MedievalPalette.GoldMid, RoundedCornerShape(8.dp))
+            .padding(4.dp)
+    ) {
+        Canvas(modifier = Modifier.fillMaxWidth().height(size - 8.dp)) {
+            val cellW = this.size.width / 8f
+            val cellH = this.size.height / 8f
+            val pad = cellW * 0.10f
+            for (r in 0 until 8) {
+                for (c in 0 until 8) {
+                    val active = shape.isCellActive(r, c)
+                    drawRoundRect(
+                        color = if (active) primaryColor else Color.White.copy(alpha = 0.06f),
+                        topLeft = Offset(c * cellW + pad, r * cellH + pad),
+                        size = Size(cellW - pad * 2f, cellH - pad * 2f),
+                        cornerRadius = CornerRadius(2f, 2f)
                     )
                 }
             }

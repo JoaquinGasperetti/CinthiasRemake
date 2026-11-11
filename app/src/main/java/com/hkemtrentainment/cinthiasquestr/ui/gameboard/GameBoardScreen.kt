@@ -66,6 +66,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
@@ -95,6 +96,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.hkemtrentainment.cinthiasquestr.CinthiasQuestApp
 import com.hkemtrentainment.cinthiasquestr.R
 import com.hkemtrentainment.cinthiasquestr.audio.GameSound
+import com.hkemtrentainment.cinthiasquestr.data.BoardShape
 import com.hkemtrentainment.cinthiasquestr.data.WorldRepository
 import com.hkemtrentainment.cinthiasquestr.ui.components.BoosterCanvasIcon
 import com.hkemtrentainment.cinthiasquestr.ui.components.MedievalPalette
@@ -174,6 +176,10 @@ fun GameBoardScreen(
     val activeShockwaves = remember { mutableStateListOf<VisualShockwave>() }
     val activeLaserBeams = remember { mutableStateListOf<VisualLaserBeam>() }
     var frameTickNanos by remember { mutableLongStateOf(0L) }
+
+    val worldConfig = remember(gameState.level) {
+        WorldRepository.getWorldForLevel(gameState.level)
+    }
 
     LaunchedEffect(
         activeParticles.size,
@@ -344,8 +350,9 @@ fun GameBoardScreen(
             modifier = Modifier.fillMaxSize()
         )
 
-        val cinthiaSizeDp = totalHeight * 0.22f
-        val maxCinthiaWidth = totalWidth * 0.65f
+        // Cinthia ajustada más arriba en la cornisa para ceder el máximo espacio vertical al tablero
+        val cinthiaSizeDp = totalHeight * 0.185f
+        val maxCinthiaWidth = totalWidth * 0.55f
         val finalCinthiaSize = minOf(cinthiaSizeDp, maxCinthiaWidth)
 
         Box(
@@ -354,7 +361,7 @@ fun GameBoardScreen(
                 .offset {
                     IntOffset(
                         x = 0,
-                        y = (totalHeightPx * 0.333f - with(currentDensity) { finalCinthiaSize.toPx() }).roundToInt()
+                        y = (totalHeightPx * 0.295f - with(currentDensity) { finalCinthiaSize.toPx() }).roundToInt()
                     )
                 },
             contentAlignment = Alignment.TopCenter
@@ -403,21 +410,63 @@ fun GameBoardScreen(
             val bottomBarTopHeight = totalHeight - innerPadding.calculateBottomPadding()
 
             Box(modifier = Modifier.fillMaxSize()) {
-                val boardPadding = 24.dp
+                // Reducimos el margen lateral a 4.dp y subimos el tope del tablero para que el tablero
+                // y las gemas sean significativamente más grandes y fáciles de ver/tocar.
+                val boardPadding = 4.dp
                 val maxBoardWidth = totalWidth - boardPadding * 2
-                val maxBoardHeight = totalHeight * 0.65f
-                var boardSize = minOf(maxBoardWidth, maxBoardHeight)
+                val maxBoardHeight = totalHeight * 0.72f
+                val minBoardTop = totalHeight * 0.308f
+                val safeBottomLimit = bottomBarTopHeight - 4.dp
+                val availableBoardHeight = (safeBottomLimit - minBoardTop).coerceAtLeast(240.dp)
+                val boardSize = minOf(maxBoardWidth, maxBoardHeight, availableBoardHeight)
 
-                val preferredBoardTop = totalHeight * 0.385f
-                val safeBottomLimit = bottomBarTopHeight - 16.dp
-                if (preferredBoardTop + boardSize > safeBottomLimit) {
-                    boardSize = safeBottomLimit - preferredBoardTop
-                }
+                // Centrar verticalmente el tablero en la franja disponible bajo la cornisa
+                val preferredBoardTop = minBoardTop + (availableBoardHeight - boardSize) * 0.35f
 
-                val boardInset = boardSize * 0.03f
+                val boardInset = boardSize * 0.018f
                 val cellSize = (boardSize - boardInset * 2f) / 8
                 val cellSizePx = with(LocalDensity.current) { cellSize.toPx() }
                 val isSelectingBoosterTarget = gameState.boardState == BoardState.WAITING_FOR_BOOSTER_TARGET
+                val activeShape = gameState.boardShape
+
+                // Insignia compacta con el nombre del nivel y la forma del tablero sobre la cornisa
+                Surface(
+                    color = MedievalPalette.IronDark.copy(alpha = 0.90f),
+                    shape = RoundedCornerShape(12.dp),
+                    border = BorderStroke(1.2.dp, worldConfig.primaryColor.copy(alpha = 0.9f)),
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .offset {
+                            IntOffset(
+                                x = 0,
+                                y = (preferredBoardTop - 26.dp).coerceAtLeast(innerPadding.calculateTopPadding() + 2.dp).roundToPx()
+                            )
+                        }
+                        .zIndex(2.5f)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 3.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        BoardShapeMiniBadge(
+                            shape = activeShape,
+                            accentColor = worldConfig.secondaryColor,
+                            size = 14.dp
+                        )
+                        Text(
+                            text = if (gameState.levelTitle.isNotEmpty()) {
+                                "${gameState.levelTitle.uppercase()} · ${activeShape.displayName.uppercase()}"
+                            } else {
+                                activeShape.displayName.uppercase()
+                            },
+                            color = MedievalPalette.GoldBright,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Black,
+                            letterSpacing = 0.6.sp
+                        )
+                    }
+                }
 
                 // Banner celebratorio de Racha de Victorias al empezar el nivel
                 AnimatedVisibility(
@@ -516,7 +565,7 @@ fun GameBoardScreen(
                     label = "dragY"
                 )
 
-                // Contenedor del Tablero 8x8
+                // Contenedor del Tablero Adaptativo con Silueta según BoardShape
                 Box(
                     modifier = Modifier
                         .size(boardSize)
@@ -534,19 +583,15 @@ fun GameBoardScreen(
                         }
                         .then(
                             if (isSelectingBoosterTarget) {
-                                Modifier.border(4.dp, MedievalPalette.GoldBright, RoundedCornerShape(16.dp))
+                                Modifier.border(3.dp, MedievalPalette.GoldBright, RoundedCornerShape(16.dp))
                             } else Modifier
                         )
                 ) {
-                    Image(
-                        painter = painterResource(id = R.drawable.board_frame),
-                        contentDescription = null,
-                        contentScale = ContentScale.FillBounds,
-                        modifier = Modifier.fillMaxSize()
-                    )
-
                     val boardCellBitmap = ImageBitmap.imageResource(id = R.drawable.board_cell)
 
+                    // Renderizador de Tablero con Forma Personalizada:
+                    // Dibuja un marco contorneado de bronce y piedra únicamente alrededor de las casillas
+                    // activas de la forma del nivel, dejando transparentes los recortes exteriores o fosos.
                     Canvas(
                         modifier = Modifier
                             .fillMaxSize()
@@ -554,21 +599,92 @@ fun GameBoardScreen(
                     ) {
                         val totalW = size.width
                         val totalH = size.height
+                        val outerPad = 5.5.dp.toPx()
+                        val midPad = 3.2.dp.toPx()
+                        val outerCorner = CornerRadius(11.dp.toPx(), 11.dp.toPx())
+                        val midCorner = CornerRadius(8.dp.toPx(), 8.dp.toPx())
 
-                        drawRect(color = Color(0xFF4E342E), size = size)
-
+                        // Pasada 1: Sombra y contorno exterior de tinta negra siguiendo la silueta del nivel
                         for (r in 0 until 8) {
                             for (c in 0 until 8) {
+                                if (!activeShape.isCellActive(r, c)) continue
+                                val left = (c * totalW / 8f)
+                                val top = (r * totalH / 8f)
+                                val right = ((c + 1) * totalW / 8f)
+                                val bottom = ((r + 1) * totalH / 8f)
+
+                                drawRoundRect(
+                                    color = MedievalPalette.InkOutline.copy(alpha = 0.92f),
+                                    topLeft = Offset(left - outerPad, top - outerPad),
+                                    size = Size((right - left) + outerPad * 2f, (bottom - top) + outerPad * 2f),
+                                    cornerRadius = outerCorner
+                                )
+                            }
+                        }
+
+                        // Pasada 2: Bisel metálico de bronce y acento del mundo alrededor de las celdas activas
+                        for (r in 0 until 8) {
+                            for (c in 0 until 8) {
+                                if (!activeShape.isCellActive(r, c)) continue
+                                val left = (c * totalW / 8f)
+                                val top = (r * totalH / 8f)
+                                val right = ((c + 1) * totalW / 8f)
+                                val bottom = ((r + 1) * totalH / 8f)
+
+                                drawRoundRect(
+                                    brush = Brush.linearGradient(
+                                        colors = listOf(
+                                            MedievalPalette.ParchmentDark,
+                                            MedievalPalette.BrassFrame,
+                                            worldConfig.primaryColor.copy(alpha = 0.85f)
+                                        ),
+                                        start = Offset(left, top),
+                                        end = Offset(right, bottom)
+                                    ),
+                                    topLeft = Offset(left - midPad, top - midPad),
+                                    size = Size((right - left) + midPad * 2f, (bottom - top) + midPad * 2f),
+                                    cornerRadius = midCorner
+                                )
+                            }
+                        }
+
+                        // Pasada 3: Fondo de piedra y casillas individuales (con damero sutil para legibilidad)
+                        for (r in 0 until 8) {
+                            for (c in 0 until 8) {
+                                if (!activeShape.isCellActive(r, c)) continue
                                 val left = (c * totalW / 8f).roundToInt()
                                 val top = (r * totalH / 8f).roundToInt()
                                 val right = ((c + 1) * totalW / 8f).roundToInt()
                                 val bottom = ((r + 1) * totalH / 8f).roundToInt()
+                                val cellW = right - left
+                                val cellH = bottom - top
+
+                                drawRect(
+                                    color = Color(0xFF3B2621),
+                                    topLeft = Offset(left.toFloat(), top.toFloat()),
+                                    size = Size(cellW.toFloat(), cellH.toFloat())
+                                )
 
                                 drawImage(
                                     image = boardCellBitmap,
                                     dstOffset = IntOffset(left, top),
-                                    dstSize = IntSize(right - left, bottom - top)
+                                    dstSize = IntSize(cellW, cellH)
                                 )
+
+                                // Sutil alternancia tipo damero para que el ojo distinga columnas y filas al instante
+                                if ((r + c) % 2 == 0) {
+                                    drawRect(
+                                        color = Color.White.copy(alpha = 0.045f),
+                                        topLeft = Offset(left.toFloat() + 1f, top.toFloat() + 1f),
+                                        size = Size((cellW - 2).toFloat(), (cellH - 2).toFloat())
+                                    )
+                                } else {
+                                    drawRect(
+                                        color = Color.Black.copy(alpha = 0.06f),
+                                        topLeft = Offset(left.toFloat() + 1f, top.toFloat() + 1f),
+                                        size = Size((cellW - 2).toFloat(), (cellH - 2).toFloat())
+                                    )
+                                }
                             }
                         }
                     }
@@ -577,15 +693,17 @@ fun GameBoardScreen(
                         modifier = Modifier
                             .fillMaxSize()
                             .padding(boardInset)
-                            .pointerInput(selectedLevel) {
+                            .pointerInput(selectedLevel, activeShape) {
                                 detectTapGestures { tapOffset ->
                                     if (size.width <= 0 || size.height <= 0) return@detectTapGestures
                                     val c = ((tapOffset.x / size.width) * 8f).toInt().coerceIn(0, 7)
                                     val r = ((tapOffset.y / size.height) * 8f).toInt().coerceIn(0, 7)
-                                    viewModel.onPieceTapped(r, c)
+                                    if (activeShape.isCellActive(r, c)) {
+                                        viewModel.onPieceTapped(r, c)
+                                    }
                                 }
                             }
-                            .pointerInput(selectedLevel, cellSizePx) {
+                            .pointerInput(selectedLevel, cellSizePx, activeShape) {
                                 detectDragGestures(
                                     onDragStart = { startOffset ->
                                         if (size.width <= 0 || size.height <= 0) return@detectDragGestures
@@ -593,11 +711,15 @@ fun GameBoardScreen(
                                         if (liveState.boardState == BoardState.IDLE && !liveState.isGameOver && !liveState.isGameWon) {
                                             val c = ((startOffset.x / size.width) * 8f).toInt().coerceIn(0, 7)
                                             val r = ((startOffset.y / size.height) * 8f).toInt().coerceIn(0, 7)
-                                            soundManager.play(GameSound.TILE_SELECT)
-                                            activeDragCell = r to c
-                                            dragOffsetX = 0f
-                                            dragOffsetY = 0f
-                                            isHorizontalDrag = null
+                                            if (activeShape.isCellActive(r, c)) {
+                                                soundManager.play(GameSound.TILE_SELECT)
+                                                activeDragCell = r to c
+                                                dragOffsetX = 0f
+                                                dragOffsetY = 0f
+                                                isHorizontalDrag = null
+                                            } else {
+                                                activeDragCell = null
+                                            }
                                         } else {
                                             activeDragCell = null
                                         }
@@ -623,18 +745,22 @@ fun GameBoardScreen(
                                         }
 
                                         if (isHorizontalDrag == true) {
-                                            dragOffsetX = newX.coerceIn(-cellSizePx, cellSizePx)
+                                            val maxRight = if (activeShape.isCellActive(currentCell.first, currentCell.second + 1)) cellSizePx else 0f
+                                            val maxLeft = if (activeShape.isCellActive(currentCell.first, currentCell.second - 1)) -cellSizePx else 0f
+                                            dragOffsetX = newX.coerceIn(maxLeft, maxRight)
                                             dragOffsetY = 0f
                                         } else if (isHorizontalDrag == false) {
+                                            val maxDown = if (activeShape.isCellActive(currentCell.first + 1, currentCell.second)) cellSizePx else 0f
+                                            val maxUp = if (activeShape.isCellActive(currentCell.first - 1, currentCell.second)) -cellSizePx else 0f
                                             dragOffsetX = 0f
-                                            dragOffsetY = newY.coerceIn(-cellSizePx, cellSizePx)
+                                            dragOffsetY = newY.coerceIn(maxUp, maxDown)
                                         }
                                     },
                                     onDragEnd = {
                                         val currentCell = activeDragCell
                                         if (currentCell != null) {
                                             val (r, c) = currentCell
-                                            val threshold = cellSizePx * 0.25f
+                                            val threshold = cellSizePx * 0.24f
                                             val finalIsHorizontal = isHorizontalDrag
                                             var didSwipe = false
 
@@ -686,6 +812,8 @@ fun GameBoardScreen(
 
                         for (r in 0 until 8) {
                             for (c in 0 until 8) {
+                                if (!activeShape.isCellActive(r, c)) continue
+
                                 val left = (c * totalW / 8f).roundToInt()
                                 val top = (r * totalH / 8f).roundToInt()
                                 val right = ((c + 1) * totalW / 8f).roundToInt()
@@ -694,7 +822,7 @@ fun GameBoardScreen(
                                 val cellHeight = with(LocalDensity.current) { (bottom - top).toDp() }
 
                                 val piece = gameState.grid.getOrNull(r)?.getOrNull(c)
-                                if (piece != null && !piece.isEmpty) {
+                                if (piece != null && !piece.isEmpty && !piece.isBlocked) {
                                     val coord = r to c
                                     val isMatched = gameState.matchParticles.contains(coord)
                                     val isSelected = gameState.selectedCell == coord
@@ -906,6 +1034,34 @@ fun GameBoardScreen(
     }
 }
 
+/**
+ * Icono matricial en miniatura que dibuja la silueta 8x8 de la forma del tablero.
+ */
+@Composable
+fun BoardShapeMiniBadge(
+    shape: BoardShape,
+    accentColor: Color = MedievalPalette.GoldBright,
+    size: Dp = 16.dp,
+    modifier: Modifier = Modifier
+) {
+    Canvas(modifier = modifier.size(size)) {
+        val cellW = this.size.width / 8f
+        val cellH = this.size.height / 8f
+        val pad = cellW * 0.08f
+        for (r in 0 until 8) {
+            for (c in 0 until 8) {
+                if (shape.isCellActive(r, c)) {
+                    drawRect(
+                        color = accentColor,
+                        topLeft = Offset(c * cellW + pad, r * cellH + pad),
+                        size = Size(cellW - pad * 2f, cellH - pad * 2f)
+                    )
+                }
+            }
+        }
+    }
+}
+
 @Composable
 private fun FloatingPopupsOverlay(
     popups: List<FloatingScorePopup>,
@@ -1103,7 +1259,7 @@ fun BoosterBar(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 6.dp, horizontal = 24.dp),
+            .padding(vertical = 2.dp, horizontal = 24.dp),
         horizontalArrangement = Arrangement.SpaceEvenly,
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -1148,19 +1304,19 @@ fun BoosterItem(
             .clickable(onClick = onClick)
     ) {
         Box(contentAlignment = Alignment.Center) {
-            // Pedestal 3D de Hierro Forjado y Oro para el Booster
+            // Pedestal 3D de Hierro Forjado y Oro para el Booster (compactado a 50.dp para dar más espacio al tablero)
             Box(
                 modifier = Modifier
-                    .size(56.dp)
+                    .size(50.dp)
                     .offset(y = 3.dp)
-                    .clip(RoundedCornerShape(16.dp))
+                    .clip(RoundedCornerShape(14.dp))
                     .background(MedievalPalette.InkOutline)
             )
             Box(
                 modifier = Modifier
-                    .size(56.dp)
-                    .shadow(6.dp, RoundedCornerShape(16.dp))
-                    .clip(RoundedCornerShape(16.dp))
+                    .size(50.dp)
+                    .shadow(6.dp, RoundedCornerShape(14.dp))
+                    .clip(RoundedCornerShape(14.dp))
                     .background(
                         if (isActive) {
                             Brush.verticalGradient(listOf(Color(0xFFFFE082), Color(0xFFFF8F00)))
@@ -1169,15 +1325,15 @@ fun BoosterItem(
                         }
                     )
                     .border(
-                        width = 2.5.dp,
+                        width = 2.dp,
                         color = if (isActive) Color.White else MedievalPalette.BrassFrame,
-                        shape = RoundedCornerShape(16.dp)
+                        shape = RoundedCornerShape(14.dp)
                     ),
                 contentAlignment = Alignment.Center
             ) {
                 BoosterCanvasIcon(
                     type = type,
-                    size = 30.dp
+                    size = 26.dp
                 )
             }
 
@@ -1186,7 +1342,7 @@ fun BoosterItem(
                 modifier = Modifier
                     .align(Alignment.TopEnd)
                     .offset(x = 5.dp, y = (-4).dp)
-                    .size(22.dp)
+                    .size(20.dp)
                     .clip(CircleShape)
                     .background(if (count > 0) Color(0xFFD32F2F) else Color(0xFF546E7A))
                     .border(1.5.dp, Color.White, CircleShape),
@@ -1195,7 +1351,7 @@ fun BoosterItem(
                 Text(
                     text = "$count",
                     color = Color.White,
-                    fontSize = 11.sp,
+                    fontSize = 10.sp,
                     fontWeight = FontWeight.Black
                 )
             }
@@ -1224,14 +1380,14 @@ fun AdMobPlaceholder() {
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(42.dp)
+            .height(34.dp)
             .background(Color(0xFF120D10).copy(alpha = 0.85f)),
         contentAlignment = Alignment.Center
     ) {
         Text(
             text = "PATROCINIO REAL · ADMOB BANNER",
             color = Color(0xFF7A685D),
-            fontSize = 10.sp,
+            fontSize = 9.sp,
             fontWeight = FontWeight.Bold,
             letterSpacing = 1.2.sp
         )

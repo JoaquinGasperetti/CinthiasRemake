@@ -2,6 +2,7 @@ package com.hkemtrentainment.cinthiasquestr
 
 import com.hkemtrentainment.cinthiasquestr.audio.SoundAsset
 import com.hkemtrentainment.cinthiasquestr.audio.SoundManager
+import com.hkemtrentainment.cinthiasquestr.data.BoardShape
 import com.hkemtrentainment.cinthiasquestr.data.PlayerData
 import com.hkemtrentainment.cinthiasquestr.data.PlayerRepository
 import com.hkemtrentainment.cinthiasquestr.data.WorldRepository
@@ -29,6 +30,7 @@ class GameLogicTest {
         assertEquals(25, level99.levelNumber)
         assertEquals(level25.targetScore, level99.targetScore)
         assertEquals(level25.moves, level99.moves)
+        assertEquals(level25.boardShape, level99.boardShape)
         assertTrue(level25.moves >= 12)
     }
 
@@ -37,6 +39,69 @@ class GameLogicTest {
         for (lvl in 1..WorldRepository.MAX_GAME_LEVELS) {
             val world = WorldRepository.getWorldForLevel(lvl)
             assertTrue(lvl in world.startLevel..world.endLevel)
+        }
+    }
+
+    @Test
+    fun `all 16 board shapes have valid 8x8 masks and every active cell supports 3-matches`() {
+        assertTrue(BoardShape.entries.size >= 16)
+        for (shape in BoardShape.entries) {
+            assertEquals("Shape ${shape.name} must have 8 rows", 8, shape.mask.size)
+            shape.mask.forEach { rowStr ->
+                assertEquals("Shape ${shape.name} rows must have 8 cols", 8, rowStr.length)
+            }
+            assertTrue("Shape ${shape.name} must have at least 40 playable cells", shape.activeCellCount >= 40)
+
+            // Cada celda activa debe pertenecer al menos a una línea horizontal o vertical de >= 3 celdas activas
+            for (r in 0 until 8) {
+                for (c in 0 until 8) {
+                    if (!shape.isCellActive(r, c)) continue
+
+                    var hSpan = 1
+                    var left = c - 1
+                    while (left >= 0 && shape.isCellActive(r, left)) { hSpan++; left-- }
+                    var right = c + 1
+                    while (right < 8 && shape.isCellActive(r, right)) { hSpan++; right++ }
+
+                    var vSpan = 1
+                    var up = r - 1
+                    while (up >= 0 && shape.isCellActive(up, c)) { vSpan++; up-- }
+                    var down = r + 1
+                    while (down < 8 && shape.isCellActive(down, c)) { vSpan++; down++ }
+
+                    assertTrue(
+                        "Cell ($r,$c) in ${shape.name} must belong to a run >= 3 (hSpan=$hSpan, vSpan=$vSpan)",
+                        hSpan >= 3 || vSpan >= 3
+                    )
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `levels feature varied non-square shapes and valid pre-placed relics`() {
+        val shapesUsed = (1..WorldRepository.MAX_GAME_LEVELS)
+            .map { WorldRepository.getLevelConfig(it).boardShape }
+            .toSet()
+        assertTrue("Levels should use at least 12 distinct board shapes", shapesUsed.size >= 12)
+
+        for (lvl in 1..WorldRepository.MAX_GAME_LEVELS) {
+            val cfg = WorldRepository.getLevelConfig(lvl)
+            assertTrue(cfg.levelTitle.isNotBlank())
+            assertTrue(cfg.activePieceTypes.size in 5..6)
+            for (relic in cfg.prePlacedRelics) {
+                assertTrue(
+                    "Pre-placed relic at (${relic.row}, ${relic.col}) in level $lvl must be on an active cell",
+                    cfg.isCellActive(relic.row, relic.col)
+                )
+            }
+            if (lvl > 1) {
+                val prevShape = WorldRepository.getLevelConfig(lvl - 1).boardShape
+                assertTrue(
+                    "Consecutive levels ${lvl - 1} and $lvl should have different board shapes",
+                    cfg.boardShape != prevShape
+                )
+            }
         }
     }
 
