@@ -156,6 +156,7 @@ class GameViewModel(
         }
     }
     private var idleHintJob: Job? = null
+    private var cheerHoldJob: Job? = null
     private var hasAppliedStreakBonusForSession = false
     private var hasCheckedInitialTutorial = false
     private var streakAtRiskOnLoss: Int = 0
@@ -479,10 +480,16 @@ class GameViewModel(
         // 2. Verificar matches normales de 3 o más piezas
         val matches = findMatches()
         if (matches.isEmpty()) {
-            // Sonido y vibración de movimiento inválido + Shake en ambas fichas
+            // Sonido y vibración de movimiento inválido + Shake en ambas fichas y reacción WORRIED
+            cheerHoldJob?.cancel()
             _effects.emit(GameEffect.PlaySound(GameSound.TILE_INVALID))
             _effects.emit(GameEffect.InvalidMoveHaptic)
-            _uiState.update { it.copy(invalidSwapCells = setOf(r1 to c1, r2 to c2)) }
+            _uiState.update {
+                it.copy(
+                    invalidSwapCells = setOf(r1 to c1, r2 to c2),
+                    cinthiaState = CinthiaState.WORRIED
+                )
+            }
 
             // Deshacer swap si no hay combinación válida
             val tempBack = logicalGrid[r1][c1]
@@ -493,7 +500,8 @@ class GameViewModel(
             _uiState.update {
                 it.copy(
                     boardState = BoardState.IDLE,
-                    invalidSwapCells = emptySet()
+                    invalidSwapCells = emptySet(),
+                    cinthiaState = if (it.movesLeft <= 5) CinthiaState.WORRIED else CinthiaState.IDLE
                 )
             }
             scheduleIdleHintTimer()
@@ -875,7 +883,7 @@ class GameViewModel(
                     matchParticles = shrinkingParticles,
                     floatingPopups = (state.floatingPopups + popup).takeLast(5),
                     tutorialCoachStep = nextCoachStep,
-                    cinthiaState = if (combo >= 2 || powerUpTriggered) CinthiaState.CHEERING else state.cinthiaState,
+                    cinthiaState = if (combo >= 2 || powerUpTriggered || hasBigMatch) CinthiaState.CHEERING else state.cinthiaState,
                     cinthiaSpeech = calloutLabel ?: state.cinthiaSpeech
                 )
             }
@@ -944,10 +952,12 @@ class GameViewModel(
 
         // Garantizar SIEMPRE que boardState regrese a IDLE al terminar la resolución,
         // incluso si el jugador perdió, para que al revivir pueda mover fichas de inmediato.
+        val wasCheeringDuringTurn = _uiState.value.cinthiaState == CinthiaState.CHEERING
         _uiState.update { state ->
             val nextCinthiaState = when {
                 state.isGameWon -> CinthiaState.CHEERING
                 state.isGameOver -> CinthiaState.SAD
+                wasCheeringDuringTurn && state.movesLeft > 2 -> CinthiaState.CHEERING
                 state.movesLeft <= 5 -> CinthiaState.WORRIED
                 else -> CinthiaState.IDLE
             }
@@ -963,6 +973,22 @@ class GameViewModel(
                 cinthiaState = nextCinthiaState,
                 cinthiaSpeech = nextSpeech
             )
+        }
+
+        if (wasCheeringDuringTurn && !_uiState.value.isGameWon && !_uiState.value.isGameOver) {
+            cheerHoldJob?.cancel()
+            cheerHoldJob = viewModelScope.launch {
+                delay(520L)
+                _uiState.update { st ->
+                    if (st.isGameWon || st.isGameOver || st.boardState != BoardState.IDLE) {
+                        st
+                    } else {
+                        st.copy(
+                            cinthiaState = if (st.movesLeft <= 5) CinthiaState.WORRIED else CinthiaState.IDLE
+                        )
+                    }
+                }
+            }
         }
 
         if (!_uiState.value.isGameOver && !_uiState.value.isGameWon) {
@@ -1790,6 +1816,19 @@ class GameViewModel(
             checkGameOver()
             _uiState.update { it.copy(boardState = BoardState.IDLE) }
             if (!_uiState.value.isGameOver && !_uiState.value.isGameWon) {
+                cheerHoldJob?.cancel()
+                cheerHoldJob = viewModelScope.launch {
+                    delay(520L)
+                    _uiState.update { st ->
+                        if (st.isGameWon || st.isGameOver || st.boardState != BoardState.IDLE) {
+                            st
+                        } else {
+                            st.copy(
+                                cinthiaState = if (st.movesLeft <= 5) CinthiaState.WORRIED else CinthiaState.IDLE
+                            )
+                        }
+                    }
+                }
                 scheduleIdleHintTimer()
             }
         }

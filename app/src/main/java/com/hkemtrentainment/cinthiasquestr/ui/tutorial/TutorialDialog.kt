@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -58,11 +59,12 @@ import com.hkemtrentainment.cinthiasquestr.ui.components.BoosterCanvasIcon
 import com.hkemtrentainment.cinthiasquestr.ui.components.ChunkyArcadeButton
 import com.hkemtrentainment.cinthiasquestr.ui.components.ForgedIronPanel
 import com.hkemtrentainment.cinthiasquestr.ui.components.MedievalPalette
-import com.hkemtrentainment.cinthiasquestr.ui.components.RoyalCrownIcon
 import com.hkemtrentainment.cinthiasquestr.ui.components.RoyalParchmentCard
 import com.hkemtrentainment.cinthiasquestr.ui.components.RoyalStarIcon
 import com.hkemtrentainment.cinthiasquestr.ui.components.StreakFlameIcon
 import com.hkemtrentainment.cinthiasquestr.ui.gameboard.BoosterType
+import com.hkemtrentainment.cinthiasquestr.ui.gameboard.CinthiaAnimatedPortrait
+import com.hkemtrentainment.cinthiasquestr.ui.gameboard.CinthiaState
 import com.hkemtrentainment.cinthiasquestr.ui.worldmap.components.BoardShapePreviewGrid
 
 private data class TutorialStepInfo(
@@ -70,7 +72,8 @@ private data class TutorialStepInfo(
     val badge: String,
     val title: String,
     val cinthiaQuote: String,
-    val summary: String
+    val summary: String,
+    val cinthiaState: CinthiaState = CinthiaState.IDLE
 )
 
 private val TUTORIAL_STEPS = listOf(
@@ -79,42 +82,48 @@ private val TUTORIAL_STEPS = listOf(
         badge = "PASO 1 DE 6 · FUNDAMENTOS",
         title = "Combina 3 o Más Gemas",
         cinthiaQuote = "¡Bienvenida/o a mi guardia! Desliza una gema o toca dos casillas vecinas para intercambiarlas.",
-        summary = "Alinea 3 o más gemas del mismo color en horizontal o vertical para romperlas, ganar puntos y alcanzar la Meta Real antes de quedarte sin movimientos."
+        summary = "Alinea 3 o más gemas del mismo color en horizontal o vertical para romperlas, ganar puntos y alcanzar la Meta Real antes de quedarte sin movimientos.",
+        cinthiaState = CinthiaState.IDLE
     ),
     TutorialStepInfo(
         stepNumber = 2,
         badge = "PASO 2 DE 6 · FORJA ARCANO-REAL",
         title = "Crea Reliquias de Poder",
         cinthiaQuote = "¡Si combinas 4 o 5 gemas iguales de un solo movimiento, forjarás una reliquia explosiva!",
-        summary = "Cada alineación grande deja un Power-Up en el tablero que puedes activar al combinarlo o tocarlo con otra pieza."
+        summary = "Cada alineación grande deja un Power-Up en el tablero que puedes activar al combinarlo o tocarlo con otra pieza.",
+        cinthiaState = CinthiaState.CHEERING
     ),
     TutorialStepInfo(
         stepNumber = 3,
         badge = "PASO 3 DE 6 · SINERGIAS SUPREMAS",
         title = "Combina 2 Power-Ups Entre Sí",
         cinthiaQuote = "¡El secreto de los maestros! Intercambia dos Power-Ups vecinos aunque sean de distinto color.",
-        summary = "Unir dos reliquias desencadena efectos devastadores que limpian gran parte del tablero en un solo movimiento."
+        summary = "Unir dos reliquias desencadena efectos devastadores que limpian gran parte del tablero en un solo movimiento.",
+        cinthiaState = CinthiaState.CHEERING
     ),
     TutorialStepInfo(
         stepNumber = 4,
         badge = "PASO 4 DE 6 · GEOMETRÍA TÁCTICA",
         title = "Tableros con Formas y Fosos",
-        cinthiaQuote = "¡No todos los campos de batalla son cuadrados! Cada nivel cambia la silueta del tablero.",
-        summary = "Las gemas caen verticalmente atravesando huecos, puentes y fosos intermedios. Aprovecha las reliquias precolocadas en cada nivel."
+        cinthiaQuote = "¡Atención en combate! No todos los campos de batalla son cuadrados y los fosos desvían las gemas.",
+        summary = "Las gemas caen verticalmente atravesando huecos, puentes y fosos intermedios. Aprovecha las reliquias precolocadas en cada nivel.",
+        cinthiaState = CinthiaState.WORRIED
     ),
     TutorialStepInfo(
         stepNumber = 5,
         badge = "PASO 5 DE 6 · ARSENAL TÁCTICO",
         title = "Usa tus Boosters Sin Gastar Turno",
         cinthiaQuote = "¡Tus 3 reliquias de la barra inferior no consumen movimientos! Úsalas en momentos clave.",
-        summary = "Toca un Booster en la parte inferior de la pantalla y elige la casilla donde quieras desatar su efecto."
+        summary = "Toca un Booster en la parte inferior de la pantalla y elige la casilla donde quieras desatar su efecto.",
+        cinthiaState = CinthiaState.IDLE
     ),
     TutorialStepInfo(
         stepNumber = 6,
         badge = "PASO 6 DE 6 · RACHA Y RECOMPENSAS",
         title = "Racha de Cinthia y 3 Estrellas",
         cinthiaQuote = "¡Gana niveles seguidos para empezar cada batalla con hasta 3 Power-Ups gratis!",
-        summary = "Los movimientos que te sobren al alcanzar la meta se convierten en Puntos de Bonus para lograr las 3 Estrellas y abrir el Cofre Real."
+        summary = "Los movimientos que te sobren al alcanzar la meta se convierten en Puntos de Bonus para lograr las 3 Estrellas y abrir el Cofre Real.",
+        cinthiaState = CinthiaState.CHEERING
     )
 )
 
@@ -211,7 +220,7 @@ fun TutorialDialog(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                // Banda de Cinthia Instructora con retrato grande y globo de consejo
+                // Banda de Cinthia Instructora con retrato grande animado y globo de consejo
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -228,11 +237,13 @@ fun TutorialDialog(
                         border = BorderStroke(2.dp, MedievalPalette.GoldMid),
                         modifier = Modifier.size(68.dp)
                     ) {
-                        Image(
-                            painter = painterResource(id = R.drawable.cinthia_idle_01),
+                        CinthiaAnimatedPortrait(
+                            state = step.cinthiaState,
                             contentDescription = "Cinthia Instructora",
-                            contentScale = ContentScale.Crop,
-                            modifier = Modifier.padding(2.dp)
+                            contentScale = ContentScale.Fit,
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(2.dp)
                         )
                     }
 

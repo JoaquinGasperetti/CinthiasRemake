@@ -6,6 +6,7 @@ import com.hkemtrentainment.cinthiasquestr.data.BoardShape
 import com.hkemtrentainment.cinthiasquestr.data.PlayerData
 import com.hkemtrentainment.cinthiasquestr.data.PlayerRepository
 import com.hkemtrentainment.cinthiasquestr.data.WorldRepository
+import com.hkemtrentainment.cinthiasquestr.ui.gameboard.CinthiaState
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -127,6 +128,22 @@ class GameLogicTest {
             assertTrue(asset.fileName.endsWith(".WAV"))
             assertTrue(asset.rawResName.matches(Regex("^[a-z0-9_]+$")))
         }
+    }
+
+    @Test
+    fun `all 4 CinthiaState animations have complete non-empty sprite sequences`() {
+        assertEquals(12, CinthiaState.IDLE.frames.size)
+        assertEquals(9, CinthiaState.CHEERING.frames.size)
+        assertEquals(10, CinthiaState.WORRIED.frames.size)
+        assertEquals(6, CinthiaState.SAD.frames.size)
+
+        val allUniqueFrames = CinthiaState.entries.flatMap { it.frames }.toSet()
+        assertEquals("All 37 sprite frames across IDLE, CHEERING, WORRIED, and SAD must be unique", 37, allUniqueFrames.size)
+
+        assertTrue(CinthiaState.CHEERING.isTallCanvas)
+        assertFalse(CinthiaState.IDLE.isTallCanvas)
+        assertFalse(CinthiaState.WORRIED.isTallCanvas)
+        assertFalse(CinthiaState.SAD.isTallCanvas)
     }
 
     @Test

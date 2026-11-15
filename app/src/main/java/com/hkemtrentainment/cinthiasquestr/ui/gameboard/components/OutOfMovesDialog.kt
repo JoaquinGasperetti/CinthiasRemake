@@ -4,7 +4,6 @@ import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -14,6 +13,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -35,7 +35,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -43,7 +42,6 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
-import com.hkemtrentainment.cinthiasquestr.R
 import com.hkemtrentainment.cinthiasquestr.ui.components.ArcadeButtonStyle
 import com.hkemtrentainment.cinthiasquestr.ui.components.ChunkyArcadeButton
 import com.hkemtrentainment.cinthiasquestr.ui.components.ForgedIronPanel
@@ -51,6 +49,8 @@ import com.hkemtrentainment.cinthiasquestr.ui.components.GoldCoinIcon
 import com.hkemtrentainment.cinthiasquestr.ui.components.MedievalPalette
 import com.hkemtrentainment.cinthiasquestr.ui.components.RoyalParchmentCard
 import com.hkemtrentainment.cinthiasquestr.ui.components.StreakFlameIcon
+import com.hkemtrentainment.cinthiasquestr.ui.gameboard.CinthiaAnimatedPortrait
+import com.hkemtrentainment.cinthiasquestr.ui.gameboard.CinthiaState
 import com.hkemtrentainment.cinthiasquestr.ui.theme.CinthiasQuestTheme
 
 @Composable
@@ -119,7 +119,7 @@ fun OutOfMovesDialog(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                // Panel Near-Miss con Retrato de Cinthia y Barra de Progreso
+                // Panel Near-Miss con Retrato Animado de Cinthia (SAD) y Barra de Progreso
                 ForgedIronPanel(
                     modifier = Modifier.fillMaxWidth(),
                     cornerRadius = 16.dp,
@@ -135,12 +135,14 @@ fun OutOfMovesDialog(
                                 color = Color(0xFF140E12),
                                 shape = RoundedCornerShape(12.dp),
                                 border = BorderStroke(1.5.dp, Color(0xFFEF5350)),
-                                modifier = Modifier.size(52.dp)
+                                modifier = Modifier.size(56.dp)
                             ) {
-                                Image(
-                                    painter = painterResource(id = R.drawable.cinthia_idle_01),
-                                    contentDescription = "Cinthia",
-                                    modifier = Modifier.padding(4.dp)
+                                CinthiaAnimatedPortrait(
+                                    state = CinthiaState.SAD,
+                                    contentDescription = "Cinthia Triste",
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .padding(4.dp)
                                 )
                             }
                             Column(modifier = Modifier.weight(1f)) {
@@ -182,7 +184,7 @@ fun OutOfMovesDialog(
                     }
                 }
 
-                // Aversión a la Pérdida (Loss Aversion): Alerta de Racha en Riesgo
+                // Aversión a la Pérdida (Loss Aversion): Alerta de Racha en Riesgo con Cinthia Preocupada (WORRIED)
                 if (winStreak > 0) {
                     val lostRelics = winStreak.coerceIn(1, 3)
                     Surface(
@@ -196,7 +198,12 @@ fun OutOfMovesDialog(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            StreakFlameIcon(size = 24.dp)
+                            CinthiaAnimatedPortrait(
+                                state = CinthiaState.WORRIED,
+                                contentDescription = "Cinthia Preocupada",
+                                modifier = Modifier.size(34.dp)
+                            )
+                            StreakFlameIcon(size = 20.dp)
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
                                     text = "¡RACHA x$winStreak EN PELIGRO!",

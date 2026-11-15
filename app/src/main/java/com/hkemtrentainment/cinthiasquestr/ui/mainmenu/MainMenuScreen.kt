@@ -51,6 +51,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -77,6 +78,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.hkemtrentainment.cinthiasquestr.CinthiasQuestApp
 import com.hkemtrentainment.cinthiasquestr.R
+import com.hkemtrentainment.cinthiasquestr.ui.gameboard.CinthiaState
 import com.hkemtrentainment.cinthiasquestr.audio.GameSound
 import com.hkemtrentainment.cinthiasquestr.data.DailyQuest
 import com.hkemtrentainment.cinthiasquestr.data.PlayerData
@@ -100,6 +102,7 @@ import com.hkemtrentainment.cinthiasquestr.ui.components.TreasureChestIcon
 import com.hkemtrentainment.cinthiasquestr.ui.gameboard.BoosterType
 import com.hkemtrentainment.cinthiasquestr.ui.tutorial.TutorialDialog
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 
 @Composable
 fun MainMenuScreen(
@@ -728,42 +731,35 @@ private fun InteractiveHeroShowcase(
     onHeroTap: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val frames = remember {
-        listOf(
-            R.drawable.cinthia_idle_01, R.drawable.cinthia_idle_02,
-            R.drawable.cinthia_idle_03, R.drawable.cinthia_idle_04,
-            R.drawable.cinthia_idle_05, R.drawable.cinthia_idle_06,
-            R.drawable.cinthia_idle_07, R.drawable.cinthia_idle_08,
-            R.drawable.cinthia_idle_09, R.drawable.cinthia_idle_10,
-            R.drawable.cinthia_idle_11, R.drawable.cinthia_idle_12
-        )
-    }
-
     var isCheeringTap by remember { mutableStateOf(false) }
     LaunchedEffect(dialogueIndex) {
         if (dialogueIndex > 0) {
             isCheeringTap = true
-            delay(650)
+            delay(CinthiaState.CHEERING.frames.size * CinthiaState.CHEERING.frameDurationMs)
             isCheeringTap = false
         }
     }
 
+    val heroState = if (isCheeringTap) CinthiaState.CHEERING else CinthiaState.IDLE
+    val activeFrames = heroState.frames
+    var frameIndex by remember(heroState) { mutableIntStateOf(0) }
+
+    LaunchedEffect(heroState) {
+        frameIndex = 0
+        if (activeFrames.size > 1) {
+            while (isActive) {
+                delay(heroState.frameDurationMs)
+                frameIndex = (frameIndex + 1) % activeFrames.size
+            }
+        }
+    }
+
     val infiniteTransition = rememberInfiniteTransition(label = "hubHeroAnim")
-    val frameIndex by infiniteTransition.animateValue(
-        initialValue = 0,
-        targetValue = 12,
-        typeConverter = Int.VectorConverter,
-        animationSpec = infiniteRepeatable(
-            animation = tween(12 * 115, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "heroFrame"
-    )
     val breathPhase by infiniteTransition.animateFloat(
         initialValue = 0f,
         targetValue = 1f,
         animationSpec = infiniteRepeatable(
-            animation = tween(if (isCheeringTap) 240 else 1100, easing = FastOutSlowInEasing),
+            animation = tween(if (isCheeringTap) 360 else 1100, easing = FastOutSlowInEasing),
             repeatMode = RepeatMode.Reverse
         ),
         label = "heroBreath"
@@ -778,6 +774,8 @@ private fun InteractiveHeroShowcase(
             "¡Toca el botón verde para entrar directo al Nivel $level!"
         )
     }
+
+    val canvasScaleMultiplier = if (heroState.isTallCanvas) 1.25f else 1f
 
     Column(
         modifier = modifier.clickable(
@@ -820,7 +818,7 @@ private fun InteractiveHeroShowcase(
                     .background(
                         Brush.radialGradient(
                             colors = listOf(
-                                MedievalPalette.GoldBright.copy(alpha = 0.42f),
+                                MedievalPalette.GoldBright.copy(alpha = if (isCheeringTap) 0.56f else 0.42f),
                                 Color.Transparent
                             )
                         )
@@ -828,15 +826,18 @@ private fun InteractiveHeroShowcase(
             )
 
             Image(
-                painter = painterResource(id = frames[frameIndex.coerceIn(0, frames.lastIndex)]),
+                painter = painterResource(id = activeFrames[frameIndex.coerceIn(0, activeFrames.lastIndex)]),
                 contentDescription = "Cinthia, Caballera Real",
                 contentScale = ContentScale.Fit,
                 modifier = Modifier
                     .size(205.dp)
-                    .offset(y = (if (isCheeringTap) -14f * breathPhase else -4f * breathPhase).dp)
+                    .offset(y = (-3f * breathPhase).dp)
                     .graphicsLayer {
-                        scaleX = 1f + 0.03f * (1f - breathPhase)
-                        scaleY = 1f + 0.03f * breathPhase
+                        scaleX = canvasScaleMultiplier * (1f + 0.02f * (1f - breathPhase))
+                        scaleY = canvasScaleMultiplier * (1f + 0.02f * breathPhase)
+                        if (heroState.isTallCanvas) {
+                            translationY = -this.size.height * 0.125f
+                        }
                     }
             )
         }

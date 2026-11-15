@@ -54,6 +54,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -1217,72 +1218,53 @@ fun CinthiaCharacter(
     comboCount: Int = 0,
     size: Dp
 ) {
-    val frames = remember {
-        listOf(
-            R.drawable.cinthia_idle_01, R.drawable.cinthia_idle_02,
-            R.drawable.cinthia_idle_03, R.drawable.cinthia_idle_04,
-            R.drawable.cinthia_idle_05, R.drawable.cinthia_idle_06,
-            R.drawable.cinthia_idle_07, R.drawable.cinthia_idle_08,
-            R.drawable.cinthia_idle_09, R.drawable.cinthia_idle_10,
-            R.drawable.cinthia_idle_11, R.drawable.cinthia_idle_12
-        )
+    val activeFrames = state.frames
+    var frameIndex by remember(state) { mutableIntStateOf(0) }
+
+    LaunchedEffect(state) {
+        frameIndex = 0
+        if (activeFrames.size > 1) {
+            while (isActive) {
+                delay(state.frameDurationMs)
+                frameIndex = (frameIndex + 1) % activeFrames.size
+            }
+        }
     }
 
+    val currentFrame = activeFrames[frameIndex.coerceIn(0, activeFrames.lastIndex)]
+
     val infiniteTransition = rememberInfiniteTransition(label = "cinthia_anim")
-    val frameIndex by infiniteTransition.animateValue(
-        initialValue = 0,
-        targetValue = 12,
-        typeConverter = Int.VectorConverter,
-        animationSpec = infiniteRepeatable(
-            animation = tween(12 * 120, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "frame"
-    )
-
-    val currentFrame = if (state == CinthiaState.SAD) frames[0] else frames[frameIndex.coerceIn(0, frames.lastIndex)]
-
-    val jumpPhase by infiniteTransition.animateFloat(
+    val breathPhase by infiniteTransition.animateFloat(
         initialValue = 0f,
         targetValue = 1f,
         animationSpec = infiniteRepeatable(
-            animation = tween(if (state == CinthiaState.CHEERING) 260 else 900, easing = FastOutSlowInEasing),
+            animation = tween(
+                durationMillis = when (state) {
+                    CinthiaState.CHEERING -> 380
+                    CinthiaState.WORRIED -> 420
+                    CinthiaState.SAD -> 1100
+                    CinthiaState.IDLE -> 950
+                },
+                easing = FastOutSlowInEasing
+            ),
             repeatMode = RepeatMode.Reverse
         ),
-        label = "jumpPhase"
+        label = "breathPhase"
     )
 
-    val jumpDp = if (state == CinthiaState.CHEERING) (-18f * jumpPhase) else (-3f * jumpPhase)
-
-    // Zoom de 1.18x sobre el sprite para eliminar el aire transparente del PNG y lucir a Cinthia grande y nítida
+    // Zoom de 1.18x sobre el sprite para eliminar el aire transparente del PNG y lucir a Cinthia grande y nítida.
+    // En CHEERING el lienzo es 512x640 (1.25x de alto por los 128px superiores de la espada en alto),
+    // por lo que aplicamos factor 1.25x y desplazamiento -0.125f en Y para mantener sus pies anclados al pedestal.
     val baseZoom = 1.18f
-    val characterScaleX = baseZoom * (if (state == CinthiaState.CHEERING) {
-        1f + 0.08f * (1f - jumpPhase)
-    } else {
-        1f + 0.02f * (1f - jumpPhase)
-    })
-    val characterScaleY = baseZoom * (if (state == CinthiaState.CHEERING) {
-        1f + 0.09f * jumpPhase
-    } else {
-        1f + 0.02f * jumpPhase
-    })
+    val canvasScaleMultiplier = if (state.isTallCanvas) 1.25f else 1f
+    val characterScaleX = baseZoom * canvasScaleMultiplier * (1f + 0.015f * (1f - breathPhase))
+    val characterScaleY = baseZoom * canvasScaleMultiplier * (1f + 0.015f * breathPhase)
 
-    val shake by infiniteTransition.animateFloat(
-        initialValue = if (state == CinthiaState.WORRIED) -4.5f else 0f,
-        targetValue = if (state == CinthiaState.WORRIED) 4.5f else 0f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(95, easing = LinearEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "shake"
-    )
-
-    val colorMatrix = remember(state) {
-        if (state == CinthiaState.SAD) {
-            ColorMatrix().apply { setToSaturation(0f) }
-        } else {
-            ColorMatrix()
-        }
+    val pedestalGlowColor = when (state) {
+        CinthiaState.CHEERING -> Color(0xFFFFD54F).copy(alpha = 0.44f)
+        CinthiaState.WORRIED -> Color(0xFFFF7043).copy(alpha = 0.36f)
+        CinthiaState.SAD -> Color(0xFF90A4AE).copy(alpha = 0.24f)
+        CinthiaState.IDLE -> Color(0xFFFFD54F).copy(alpha = 0.28f)
     }
 
     Box(contentAlignment = Alignment.TopCenter) {
@@ -1297,7 +1279,7 @@ fun CinthiaCharacter(
                 .background(
                     Brush.radialGradient(
                         colors = listOf(
-                            Color(0xFFFFD54F).copy(alpha = 0.28f),
+                            pedestalGlowColor,
                             Color.Transparent
                         )
                     )
@@ -1306,16 +1288,17 @@ fun CinthiaCharacter(
 
         Image(
             painter = painterResource(id = currentFrame),
-            contentDescription = "Cinthia",
+            contentDescription = "Cinthia (${state.name})",
             contentScale = ContentScale.Fit,
             modifier = Modifier
                 .size(size)
-                .offset(x = shake.dp, y = jumpDp.dp)
                 .graphicsLayer {
                     scaleX = characterScaleX
                     scaleY = characterScaleY
-                },
-            colorFilter = ColorFilter.colorMatrix(colorMatrix)
+                    if (state.isTallCanvas) {
+                        translationY = -this.size.height * 0.125f * baseZoom
+                    }
+                }
         )
 
         val displayBubble = speechText ?: if (comboCount >= 2) "¡COMBO x$comboCount!" else null

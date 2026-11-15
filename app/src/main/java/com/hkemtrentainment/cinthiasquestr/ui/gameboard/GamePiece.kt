@@ -20,7 +20,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
@@ -35,6 +37,8 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import com.hkemtrentainment.cinthiasquestr.R
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import java.util.UUID
 import kotlin.math.sin
 
@@ -95,11 +99,101 @@ enum class BoosterType(val displayName: String, val priceCoins: Int) {
     SHUFFLE("Barajar", 120)
 }
 
-enum class CinthiaState {
-    IDLE,
-    CHEERING,
-    WORRIED,
-    SAD
+/**
+ * Estados de animación por cuadros (sprite sheets) de Cinthia.
+ * - IDLE: 12 cuadros (512x512)
+ * - CHEERING: 9 cuadros (512x640, con 128px de margen superior para la espada en alto)
+ * - WORRIED: 10 cuadros (512x512)
+ * - SAD: 6 cuadros (512x512)
+ */
+enum class CinthiaState(
+    val frames: List<Int>,
+    val frameDurationMs: Long,
+    val isTallCanvas: Boolean = false
+) {
+    IDLE(
+        frames = listOf(
+            R.drawable.cinthia_idle_01, R.drawable.cinthia_idle_02,
+            R.drawable.cinthia_idle_03, R.drawable.cinthia_idle_04,
+            R.drawable.cinthia_idle_05, R.drawable.cinthia_idle_06,
+            R.drawable.cinthia_idle_07, R.drawable.cinthia_idle_08,
+            R.drawable.cinthia_idle_09, R.drawable.cinthia_idle_10,
+            R.drawable.cinthia_idle_11, R.drawable.cinthia_idle_12
+        ),
+        frameDurationMs = 115L,
+        isTallCanvas = false
+    ),
+    CHEERING(
+        frames = listOf(
+            R.drawable.cinthia_cheering_01, R.drawable.cinthia_cheering_02,
+            R.drawable.cinthia_cheering_03, R.drawable.cinthia_cheering_04,
+            R.drawable.cinthia_cheering_05, R.drawable.cinthia_cheering_06,
+            R.drawable.cinthia_cheering_07, R.drawable.cinthia_cheering_08,
+            R.drawable.cinthia_cheering_09
+        ),
+        frameDurationMs = 95L,
+        isTallCanvas = true
+    ),
+    WORRIED(
+        frames = listOf(
+            R.drawable.cinthia_worried_01, R.drawable.cinthia_worried_02,
+            R.drawable.cinthia_worried_03, R.drawable.cinthia_worried_04,
+            R.drawable.cinthia_worried_05, R.drawable.cinthia_worried_06,
+            R.drawable.cinthia_worried_07, R.drawable.cinthia_worried_08,
+            R.drawable.cinthia_worried_09, R.drawable.cinthia_worried_10
+        ),
+        frameDurationMs = 105L,
+        isTallCanvas = false
+    ),
+    SAD(
+        frames = listOf(
+            R.drawable.cinthia_sad_01, R.drawable.cinthia_sad_02,
+            R.drawable.cinthia_sad_03, R.drawable.cinthia_sad_04,
+            R.drawable.cinthia_sad_05, R.drawable.cinthia_sad_06
+        ),
+        frameDurationMs = 135L,
+        isTallCanvas = false
+    )
+}
+
+/**
+ * Retrato animado reutilizable de Cinthia para diálogos (Victoria, Sin Movimientos, Tutorial, Tienda).
+ * Compensa automáticamente el lienzo extendido 512x640 de CHEERING para mantener el encuadre consistente.
+ */
+@Composable
+fun CinthiaAnimatedPortrait(
+    state: CinthiaState,
+    modifier: Modifier = Modifier,
+    contentDescription: String? = "Cinthia",
+    contentScale: ContentScale = ContentScale.Fit
+) {
+    val activeFrames = state.frames
+    var frameIndex by remember(state) { mutableIntStateOf(0) }
+
+    LaunchedEffect(state) {
+        frameIndex = 0
+        if (activeFrames.size > 1) {
+            while (isActive) {
+                delay(state.frameDurationMs)
+                frameIndex = (frameIndex + 1) % activeFrames.size
+            }
+        }
+    }
+
+    val currentDrawable = activeFrames[frameIndex.coerceIn(0, activeFrames.lastIndex)]
+
+    Image(
+        painter = painterResource(id = currentDrawable),
+        contentDescription = contentDescription,
+        contentScale = contentScale,
+        modifier = modifier.graphicsLayer {
+            if (state.isTallCanvas) {
+                scaleX = 1.25f
+                scaleY = 1.25f
+                translationY = -size.height * 0.125f
+            }
+        }
+    )
 }
 
 data class GamePiece(
