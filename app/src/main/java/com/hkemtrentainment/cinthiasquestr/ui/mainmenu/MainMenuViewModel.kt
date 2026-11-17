@@ -92,7 +92,7 @@ class MainMenuViewModel(private val playerRepository: PlayerRepository) : ViewMo
             val msg = if (success) {
                 "¡Forjaste +1 ${type.displayName} para tu inventario!"
             } else {
-                "Monedas insuficientes (${type.priceCoins} requeridas)."
+                "Monedas insuficientes (${type.priceCoins} requeridas). ¡Mira un video para ganar oro gratis!"
             }
             _uiState.update { it.copy(shopMessage = msg) }
         }
@@ -108,6 +108,24 @@ class MainMenuViewModel(private val playerRepository: PlayerRepository) : ViewMo
                 "Necesitas $bundleCost monedas de oro para el Lote de Asedio Real."
             }
             _uiState.update { it.copy(shopMessage = msg) }
+        }
+    }
+
+    /**
+     * Otorga monedas de oro al completar un anuncio bonificado (Rewarded Ad)
+     * desde la Armería Real, el Calendario 7D o el Pergamino de Misiones.
+     */
+    fun grantRewardedAdCoins(amount: Int = 100, originLabel: String = "Tesoro Real") {
+        if (amount <= 0) return
+        viewModelScope.launch {
+            playerRepository.addCoins(amount)
+            val message = "¡$originLabel recibido: +$amount Monedas de Oro!"
+            _uiState.update {
+                it.copy(
+                    shopMessage = message,
+                    questBannerMessage = message
+                )
+            }
         }
     }
 

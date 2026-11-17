@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Surface
@@ -53,6 +54,7 @@ fun ShopDialog(
     shopMessage: String?,
     onBuyBooster: (BoosterType) -> Unit,
     onBuyRoyalBundle: () -> Unit = {},
+    onWatchAdForCoins: () -> Unit = {},
     onClaimBonusCoins: () -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -70,7 +72,7 @@ fun ShopDialog(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(6.dp),
-            contentPadding = PaddingValues(18.dp)
+            contentPadding = PaddingValues(16.dp)
         ) {
             // Cabecera de la Armería Real con retrato de Cinthia y saldo de oro
             Row(
@@ -86,7 +88,7 @@ fun ShopDialog(
                         color = MedievalPalette.IronDark,
                         shape = RoundedCornerShape(14.dp),
                         border = BorderStroke(2.dp, MedievalPalette.GoldMid),
-                        modifier = Modifier.size(46.dp)
+                        modifier = Modifier.size(44.dp)
                     ) {
                         Image(
                             painter = painterResource(id = R.drawable.cinthia_idle_01),
@@ -126,16 +128,16 @@ fun ShopDialog(
                 }
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(10.dp))
 
             // Oferta Destacada de Alto Valor (Anclaje de Precios: Lote de Asedio Real -22%)
             ForgedIronPanel(
                 modifier = Modifier.fillMaxWidth(),
                 cornerRadius = 16.dp,
                 trimColor = MedievalPalette.GoldBright,
-                contentPadding = PaddingValues(12.dp)
+                contentPadding = PaddingValues(11.dp)
             ) {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -154,24 +156,24 @@ fun ShopDialog(
                                     modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                                 )
                             }
-                            Spacer(modifier = Modifier.height(4.dp))
+                            Spacer(modifier = Modifier.height(3.dp))
                             Text(
                                 text = "Lote de Asedio Completo",
                                 color = MedievalPalette.GoldBright,
                                 fontWeight = FontWeight.Black,
-                                fontSize = 15.sp
+                                fontSize = 14.sp
                             )
                             Text(
                                 text = "+1 Martillo · +1 Dinamita · +1 Barajar",
                                 color = Color(0xFFD7CCC8),
-                                fontSize = 11.sp
+                                fontSize = 10.sp
                             )
                         }
 
                         Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            BoosterCanvasIcon(type = BoosterType.HAMMER, size = 24.dp)
-                            BoosterCanvasIcon(type = BoosterType.DYNAMITE, size = 24.dp)
-                            BoosterCanvasIcon(type = BoosterType.SHUFFLE, size = 24.dp)
+                            BoosterCanvasIcon(type = BoosterType.HAMMER, size = 22.dp)
+                            BoosterCanvasIcon(type = BoosterType.DYNAMITE, size = 22.dp)
+                            BoosterCanvasIcon(type = BoosterType.SHUFFLE, size = 22.dp)
                         }
                     }
 
@@ -187,18 +189,18 @@ fun ShopDialog(
                         GoldCoinIcon(size = 16.dp)
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = " LLEVAR LOTE POR $bundleCost (ANTES 370)",
+                            text = "LLEVAR LOTE POR $bundleCost (ANTES 370)",
                             fontWeight = FontWeight.Black,
-                            fontSize = 12.sp
+                            fontSize = 11.sp
                         )
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
             // Artículos individuales con iconografía diegética en Canvas
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
                 ShopBoosterRow(
                     boosterType = BoosterType.HAMMER,
                     title = "Martillo de Guerra",
@@ -231,7 +233,7 @@ fun ShopDialog(
             }
 
             if (shopMessage != null) {
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(7.dp))
                 Surface(
                     color = Color(0xFF1B5E20),
                     shape = RoundedCornerShape(10.dp),
@@ -243,12 +245,39 @@ fun ShopDialog(
                         fontWeight = FontWeight.Bold,
                         fontSize = 11.sp,
                         textAlign = TextAlign.Center,
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Botón de Video Bonificado AdMob (+100 Monedas de Oro Gratis) para impulsar eCPM y retención
+            ChunkyArcadeButton(
+                onClick = onWatchAdForCoins,
+                style = ArcadeButtonStyle.COBALT_MAGIC,
+                cornerRadius = 14.dp,
+                lipHeight = 4.dp,
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 9.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(
+                    imageVector = Icons.Default.PlayArrow,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                GoldCoinIcon(size = 16.dp)
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = "TESORO REAL GRATIS · VER VIDEO (+100 ORO)",
+                    fontWeight = FontWeight.Black,
+                    fontSize = 11.sp,
+                    textAlign = TextAlign.Center
+                )
+            }
+
+            Spacer(modifier = Modifier.height(6.dp))
 
             // Botón de Cofre Diario integrado en la Armería
             ChunkyArcadeButton(
@@ -257,10 +286,10 @@ fun ShopDialog(
                 style = if (canClaimToday) ArcadeButtonStyle.EMERALD_PLAY else ArcadeButtonStyle.IRON_SLATE,
                 cornerRadius = 14.dp,
                 lipHeight = 4.dp,
-                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp),
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 9.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
-                TreasureChestIcon(isOpen = canClaimToday, isRoyalGold = false, size = 20.dp)
+                TreasureChestIcon(isOpen = canClaimToday, isRoyalGold = false, size = 18.dp)
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
                     text = if (canClaimToday) {
@@ -296,7 +325,7 @@ private fun ShopBoosterRow(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(10.dp),
+                .padding(9.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
@@ -308,12 +337,12 @@ private fun ShopBoosterRow(
                     color = MedievalPalette.IronDark,
                     shape = RoundedCornerShape(12.dp),
                     border = BorderStroke(1.5.dp, MedievalPalette.GoldMid),
-                    modifier = Modifier.size(46.dp)
+                    modifier = Modifier.size(42.dp)
                 ) {
                     BoosterCanvasIcon(
                         type = boosterType,
-                        size = 28.dp,
-                        modifier = Modifier.padding(8.dp)
+                        size = 26.dp,
+                        modifier = Modifier.padding(7.dp)
                     )
                 }
                 Spacer(modifier = Modifier.width(10.dp))
@@ -343,7 +372,7 @@ private fun ShopBoosterRow(
                     }
                     Text(
                         text = description,
-                        fontSize = 11.sp,
+                        fontSize = 10.sp,
                         color = MedievalPalette.ParchmentTextMuted
                     )
                 }
@@ -357,10 +386,10 @@ private fun ShopBoosterRow(
                 style = ArcadeButtonStyle.ROYAL_GOLD,
                 cornerRadius = 12.dp,
                 lipHeight = 3.dp,
-                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp),
-                modifier = Modifier.width(88.dp)
+                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 7.dp),
+                modifier = Modifier.width(86.dp)
             ) {
-                GoldCoinIcon(size = 15.dp)
+                GoldCoinIcon(size = 14.dp)
                 Spacer(modifier = Modifier.width(4.dp))
                 Text(
                     text = "$price",

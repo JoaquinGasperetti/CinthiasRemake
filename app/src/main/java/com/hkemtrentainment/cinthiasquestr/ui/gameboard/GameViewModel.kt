@@ -1430,6 +1430,17 @@ class GameViewModel(
     }
 
     /**
+     * Otorga el bono del Intersticial Bonificado durante transiciones entre niveles.
+     */
+    fun grantTransitionBlessingCoins(bonusCoins: Int = 60) {
+        if (bonusCoins <= 0) return
+        viewModelScope.launch {
+            _effects.emit(GameEffect.PlaySound(GameSound.AWARD_GOLD))
+            playerRepository.addCoins(bonusCoins)
+        }
+    }
+
+    /**
      * Revive al jugador otorgando `+count` movimientos extra y desbloqueando inmediatamente
      * el tablero en `BoardState.IDLE` para que pueda seguir haciendo movimientos sin bloqueos.
      */

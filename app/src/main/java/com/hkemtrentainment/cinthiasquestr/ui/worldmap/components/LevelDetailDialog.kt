@@ -50,6 +50,7 @@ import com.hkemtrentainment.cinthiasquestr.ui.components.ArcadeButtonStyle
 import com.hkemtrentainment.cinthiasquestr.ui.components.BoosterCanvasIcon
 import com.hkemtrentainment.cinthiasquestr.ui.components.ChunkyArcadeButton
 import com.hkemtrentainment.cinthiasquestr.ui.components.ForgedIronPanel
+import com.hkemtrentainment.cinthiasquestr.ui.components.GoldCoinIcon
 import com.hkemtrentainment.cinthiasquestr.ui.components.MedievalPalette
 import com.hkemtrentainment.cinthiasquestr.ui.components.RoyalCrownIcon
 import com.hkemtrentainment.cinthiasquestr.ui.components.RoyalParchmentCard
@@ -65,6 +66,8 @@ fun LevelDetailDialog(
     hammerCount: Int = 1,
     dynamiteCount: Int = 1,
     shuffleCount: Int = 1,
+    blessingAlreadyClaimed: Boolean = false,
+    onRequestBlessingAd: () -> Unit = {},
     onPlayClick: (Int) -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -170,7 +173,7 @@ fun LevelDetailDialog(
                     .fillMaxWidth()
                     .padding(16.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+                verticalArrangement = Arrangement.spacedBy(9.dp)
             ) {
                 // Objetivo de Puntos, Límite de Movimientos y Vista Previa de la Forma del Tablero
                 ForgedIronPanel(
@@ -341,6 +344,26 @@ fun LevelDetailDialog(
                     PreLevelBoosterBadge(type = BoosterType.HAMMER, count = hammerCount)
                     PreLevelBoosterBadge(type = BoosterType.DYNAMITE, count = dynamiteCount)
                     PreLevelBoosterBadge(type = BoosterType.SHUFFLE, count = shuffleCount)
+                }
+
+                // Botón de Intersticial Bonificado ("Bendición de Batalla") con pantalla introductoria reglamentaria
+                if (!blessingAlreadyClaimed) {
+                    ChunkyArcadeButton(
+                        onClick = onRequestBlessingAd,
+                        style = ArcadeButtonStyle.COBALT_MAGIC,
+                        cornerRadius = 14.dp,
+                        lipHeight = 4.dp,
+                        contentPadding = PaddingValues(vertical = 8.dp, horizontal = 14.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        GoldCoinIcon(size = 16.dp)
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "BENDICIÓN PRE-BATALLA (+60 ORO · ANUNCIO BREVE)",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Black
+                        )
+                    }
                 }
 
                 // Botón Táctil 3D para Iniciar la Batalla

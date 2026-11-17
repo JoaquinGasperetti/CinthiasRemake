@@ -48,8 +48,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -75,6 +77,9 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.hkemtrentainment.cinthiasquestr.CinthiasQuestApp
 import com.hkemtrentainment.cinthiasquestr.R
+import com.hkemtrentainment.cinthiasquestr.ads.AdMobBanner
+import com.hkemtrentainment.cinthiasquestr.ads.RewardedInterstitialIntroDialog
+import com.hkemtrentainment.cinthiasquestr.ads.findActivity
 import com.hkemtrentainment.cinthiasquestr.audio.GameSound
 import com.hkemtrentainment.cinthiasquestr.data.WorldConfig
 import com.hkemtrentainment.cinthiasquestr.data.WorldRepository
@@ -106,12 +111,55 @@ fun WorldMapScreen(
     val scrollState = rememberScrollState()
     val coroutineScope = rememberCoroutineScope()
     val context = LocalContext.current
-    val soundManager = remember(context) {
-        (context.applicationContext as CinthiasQuestApp).soundManager
-    }
+    val app = remember(context) { context.applicationContext as CinthiasQuestApp }
+    val soundManager = app.soundManager
+    val adMobManager = app.adMobManager
     val haptic = LocalHapticFeedback.current
 
     val worldYOffsets = remember { mutableStateMapOf<Int, Int>() }
+    var pendingBlessingIntroForLevel by remember { mutableStateOf<Int?>(null) }
+
+    // Diálogo de introducción reglamentario para el Intersticial Bonificado ("Bendición Pre-Batalla")
+    pendingBlessingIntroForLevel?.let { targetLvl ->
+        RewardedInterstitialIntroDialog(
+            rewardCoins = 60,
+            title = "BENDICIÓN PRE-BATALLA",
+            subtitle = "Recibe +60 Monedas de Oro para el Nivel $targetLvl viendo un anuncio breve",
+            onStartAdNow = {
+                pendingBlessingIntroForLevel = null
+                adMobManager.showRewardedInterstitialAd(
+                    activity = context.findActivity(),
+                    onUserEarnedReward = {
+                        soundManager.play(GameSound.AWARD_GOLD)
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        viewModel.grantPreBattleBlessing(targetLvl, bonusCoins = 60)
+                    },
+                    onAdUnavailable = {
+                        // Si el intersticial bonificado no está en caché, intenta con el video bonificado normal
+                        adMobManager.showRewardedAd(
+                            activity = context.findActivity(),
+                            onUserEarnedReward = {
+                                soundManager.play(GameSound.AWARD_GOLD)
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                viewModel.grantPreBattleBlessing(targetLvl, bonusCoins = 60)
+                            },
+                            onAdUnavailable = {
+                                Toast.makeText(
+                                    context,
+                                    "Cargando anuncio de la Corona, intenta en unos segundos...",
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            }
+                        )
+                    }
+                )
+            },
+            onSkipAd = {
+                soundManager.play(GameSound.TILE_DESELECT)
+                pendingBlessingIntroForLevel = null
+            }
+        )
+    }
 
     uiState.activeDetailLevel?.let { levelNum ->
         LevelDetailDialog(
@@ -121,8 +169,14 @@ fun WorldMapScreen(
             hammerCount = uiState.hammerCount,
             dynamiteCount = uiState.dynamiteCount,
             shuffleCount = uiState.shuffleCount,
+            blessingAlreadyClaimed = uiState.preBattleBlessingClaimedForLevel == levelNum,
+            onRequestBlessingAd = {
+                soundManager.play(GameSound.TILE_SELECT)
+                pendingBlessingIntroForLevel = levelNum
+            },
             onPlayClick = { selected ->
                 soundManager.play(GameSound.MATCH_SUCCESS_GEM)
+                adMobManager.recordUserAction()
                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                 viewModel.dismissDetailDialog()
                 onLevelSelect(selected)
@@ -143,12 +197,13 @@ fun WorldMapScreen(
                 winStreak = uiState.winStreak,
                 onBackClick = {
                     soundManager.play(GameSound.TILE_DESELECT)
+                    adMobManager.recordUserAction()
                     onBackClick()
                 }
             )
         },
         bottomBar = {
-            // Barra fija de acción rápida para entrar al nivel actual sin perderse en el mapa
+            // Barra fija de acción rápida + Banner Adaptativo AdMob separado visualmente
             Surface(
                 color = MedievalPalette.IronDark.copy(alpha = 0.96f),
                 border = BorderStroke(1.5.dp, MedievalPalette.BrassFrame),
@@ -156,56 +211,60 @@ fun WorldMapScreen(
                     .fillMaxWidth()
                     .navigationBarsPadding()
             ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 10.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    val activeWorld = WorldRepository.getWorldForLevel(uiState.maxUnlockedLevel)
-                    val activeLevelConfig = WorldRepository.getLevelConfig(uiState.maxUnlockedLevel)
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = "FRENTE DE BATALLA ACTUAL",
-                            color = MedievalPalette.GoldBright,
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Black,
-                            letterSpacing = 1.sp
-                        )
-                        Text(
-                            text = "Nv.${uiState.maxUnlockedLevel} · ${activeLevelConfig.levelTitle} (${activeLevelConfig.boardShape.displayName})",
-                            color = Color.White,
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.ExtraBold
-                        )
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 10.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        val activeLevelConfig = WorldRepository.getLevelConfig(uiState.maxUnlockedLevel)
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "FRENTE DE BATALLA ACTUAL",
+                                color = MedievalPalette.GoldBright,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Black,
+                                letterSpacing = 1.sp
+                            )
+                            Text(
+                                text = "Nv.${uiState.maxUnlockedLevel} · ${activeLevelConfig.levelTitle} (${activeLevelConfig.boardShape.displayName})",
+                                color = Color.White,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.ExtraBold
+                            )
+                        }
+
+                        ChunkyArcadeButton(
+                            onClick = {
+                                soundManager.play(GameSound.TILE_SELECT)
+                                adMobManager.recordUserAction()
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                viewModel.onLevelClicked(uiState.maxUnlockedLevel)
+                            },
+                            style = ArcadeButtonStyle.EMERALD_PLAY,
+                            cornerRadius = 14.dp,
+                            lipHeight = 4.dp,
+                            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 9.dp),
+                            modifier = Modifier.width(155.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.PlayArrow,
+                                contentDescription = null,
+                                tint = Color.White,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = "NIVEL ${uiState.maxUnlockedLevel}",
+                                fontWeight = FontWeight.Black,
+                                fontSize = 13.sp
+                            )
+                        }
                     }
 
-                    ChunkyArcadeButton(
-                        onClick = {
-                            soundManager.play(GameSound.TILE_SELECT)
-                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                            viewModel.onLevelClicked(uiState.maxUnlockedLevel)
-                        },
-                        style = ArcadeButtonStyle.EMERALD_PLAY,
-                        cornerRadius = 14.dp,
-                        lipHeight = 4.dp,
-                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 9.dp),
-                        modifier = Modifier.width(155.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.PlayArrow,
-                            contentDescription = null,
-                            tint = Color.White,
-                            modifier = Modifier.size(20.dp)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = "NIVEL ${uiState.maxUnlockedLevel}",
-                            fontWeight = FontWeight.Black,
-                            fontSize = 13.sp
-                        )
-                    }
+                    AdMobBanner(modifier = Modifier.fillMaxWidth())
                 }
             }
         }
@@ -247,6 +306,7 @@ fun WorldMapScreen(
                     levelStars = uiState.levelStars,
                     onWorldSelect = { world ->
                         soundManager.play(GameSound.TILE_SELECT)
+                        adMobManager.recordUserAction()
                         haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                         viewModel.selectWorld(world)
                         worldYOffsets[world.id]?.let { yPos ->
@@ -327,6 +387,7 @@ fun WorldMapScreen(
                                             onClick = {
                                                 if (isUnlocked) {
                                                     soundManager.play(GameSound.TILE_SELECT)
+                                                    adMobManager.recordUserAction()
                                                     haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                                     viewModel.onLevelClicked(levelNum)
                                                 } else {

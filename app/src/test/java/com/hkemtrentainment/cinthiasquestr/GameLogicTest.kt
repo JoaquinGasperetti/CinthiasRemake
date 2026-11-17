@@ -1,5 +1,6 @@
 package com.hkemtrentainment.cinthiasquestr
 
+import com.hkemtrentainment.cinthiasquestr.ads.AdPacingPolicy
 import com.hkemtrentainment.cinthiasquestr.audio.SoundAsset
 import com.hkemtrentainment.cinthiasquestr.audio.SoundManager
 import com.hkemtrentainment.cinthiasquestr.data.BoardShape
@@ -206,5 +207,95 @@ class GameLogicTest {
 
         assertTrue(quests[2].isCompleted)
         assertFalse(quests[2].isClaimed)
+    }
+
+    @Test
+    fun `AdPacingPolicy configures official production IDs and ATP G rating`() {
+        assertEquals("G", AdPacingPolicy.MAX_CONTENT_RATING_ATP)
+        assertEquals("ca-app-pub-2266949018056491~1454950722", AdPacingPolicy.ADMOB_APP_ID)
+        assertEquals("ca-app-pub-2266949018056491/2593606728", AdPacingPolicy.BANNER_AD_UNIT_ID)
+        assertEquals("ca-app-pub-2266949018056491/6206769867", AdPacingPolicy.REWARDED_AD_UNIT_ID)
+        assertEquals("ca-app-pub-2266949018056491/6341280048", AdPacingPolicy.APP_OPEN_AD_UNIT_ID)
+        assertEquals("ca-app-pub-2266949018056491/3844330405", AdPacingPolicy.INTERSTITIAL_AD_UNIT_ID)
+        assertEquals("ca-app-pub-2266949018056491/3527414441", AdPacingPolicy.REWARDED_INTERSTITIAL_AD_UNIT_ID)
+    }
+
+    @Test
+    fun `AdPacingPolicy enforces Google AdMob interstitial and app open retention rules`() {
+        val now = 1_000_000L
+
+        // Nivel 1 (Onboarding D1) nunca dispara intersticial forzado
+        assertFalse(
+            AdPacingPolicy.canShowInterstitialAd(
+                isAdLoadedAndValid = true,
+                isShowingFullScreenAd = false,
+                currentLevel = 1,
+                userActionsSinceLastInterstitial = 5,
+                lastInterstitialShownMs = 0L,
+                lastRewardedShownMs = 0L,
+                nowMs = now
+            )
+        )
+
+        // Menos de 2 acciones de usuario bloquea el intersticial según política de AdMob
+        assertFalse(
+            AdPacingPolicy.canShowInterstitialAd(
+                isAdLoadedAndValid = true,
+                isShowingFullScreenAd = false,
+                currentLevel = 3,
+                userActionsSinceLastInterstitial = 1,
+                lastInterstitialShownMs = 0L,
+                lastRewardedShownMs = 0L,
+                nowMs = now
+            )
+        )
+
+        // Cooldown post-anuncio bonificado evita apilar un intersticial tras ver un video voluntario
+        assertFalse(
+            AdPacingPolicy.canShowInterstitialAd(
+                isAdLoadedAndValid = true,
+                isShowingFullScreenAd = false,
+                currentLevel = 3,
+                userActionsSinceLastInterstitial = 3,
+                lastInterstitialShownMs = 0L,
+                lastRewardedShownMs = now - 10_000L,
+                nowMs = now
+            )
+        )
+
+        // Nivel >= 2, >= 2 acciones y fuera de cooldown permite intersticial
+        assertTrue(
+            AdPacingPolicy.canShowInterstitialAd(
+                isAdLoadedAndValid = true,
+                isShowingFullScreenAd = false,
+                currentLevel = 2,
+                userActionsSinceLastInterstitial = 2,
+                lastInterstitialShownMs = now - 65_000L,
+                lastRewardedShownMs = now - 50_000L,
+                nowMs = now
+            )
+        )
+
+        // App Open protege la primera apertura en frío sin tutorial completado y se activa al volver al primer plano
+        assertFalse(
+            AdPacingPolicy.canShowAppOpenAd(
+                isAdLoadedAndValid = true,
+                isShowingFullScreenAd = false,
+                foregroundEventCount = 1,
+                hasCompletedTutorial = false,
+                lastFullScreenDismissedMs = 0L,
+                nowMs = now
+            )
+        )
+        assertTrue(
+            AdPacingPolicy.canShowAppOpenAd(
+                isAdLoadedAndValid = true,
+                isShowingFullScreenAd = false,
+                foregroundEventCount = 2,
+                hasCompletedTutorial = false,
+                lastFullScreenDismissedMs = 0L,
+                nowMs = now
+            )
+        )
     }
 }

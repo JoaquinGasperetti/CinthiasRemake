@@ -95,7 +95,11 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.hkemtrentainment.cinthiasquestr.CinthiasQuestApp
+import android.widget.Toast
 import com.hkemtrentainment.cinthiasquestr.R
+import com.hkemtrentainment.cinthiasquestr.ads.AdMobBanner
+import com.hkemtrentainment.cinthiasquestr.ads.RewardedInterstitialIntroDialog
+import com.hkemtrentainment.cinthiasquestr.ads.findActivity
 import com.hkemtrentainment.cinthiasquestr.audio.GameSound
 import com.hkemtrentainment.cinthiasquestr.data.BoardShape
 import com.hkemtrentainment.cinthiasquestr.data.WorldRepository
@@ -166,9 +170,10 @@ fun GameBoardScreen(
     var showPauseDialog by remember { mutableStateOf(false) }
 
     val context = LocalContext.current
-    val soundManager = remember(context) {
-        (context.applicationContext as CinthiasQuestApp).soundManager
-    }
+    val app = remember(context) { context.applicationContext as CinthiasQuestApp }
+    val soundManager = app.soundManager
+    val adMobManager = app.adMobManager
+    var pendingTransitionBlessingAction by remember { mutableStateOf<(() -> Unit)?>(null) }
 
     val haptic = LocalHapticFeedback.current
     val shakeOffset = remember { Animatable(Offset.Zero, Offset.VectorConverter) }
@@ -406,7 +411,7 @@ fun GameBoardScreen(
                         activeBooster = gameState.activeBooster,
                         onBoosterClick = { viewModel.onBoosterSelected(it) }
                     )
-                    AdMobPlaceholder()
+                    AdMobBanner(modifier = Modifier.fillMaxWidth())
                 }
             }
         ) { innerPadding ->
@@ -1067,6 +1072,58 @@ fun GameBoardScreen(
             )
         }
 
+        // Función de transición inteligente: intenta mostrar un Intersticial si cumple cooldown/políticas;
+        // si el Intersticial está en cooldown pero hay un Intersticial Bonificado listo, ofrece el diálogo
+        // introductorio con opción de saltar y bono de +60 Monedas de Oro.
+        val runLevelTransitionWithAds: (() -> Unit) -> Unit = { destinationAction ->
+            val activity = context.findActivity()
+            val shownInterstitial = adMobManager.showInterstitialIfEligible(
+                activity = activity,
+                currentLevel = gameState.level,
+                onAdDismissed = {
+                    destinationAction()
+                }
+            )
+            if (!shownInterstitial) {
+                if (!gameState.doubleCoinsClaimed &&
+                    adMobManager.canOfferTransitionRewardedInterstitial(gameState.level)
+                ) {
+                    pendingTransitionBlessingAction = destinationAction
+                } else {
+                    destinationAction()
+                }
+            }
+        }
+
+        pendingTransitionBlessingAction?.let { continuation ->
+            RewardedInterstitialIntroDialog(
+                rewardCoins = 60,
+                title = "TESORO REAL DE TRANSICIÓN",
+                subtitle = "Recibe +60 Monedas de Oro adicionales antes de continuar",
+                onStartAdNow = {
+                    val nextAction = continuation
+                    pendingTransitionBlessingAction = null
+                    adMobManager.showRewardedInterstitialAd(
+                        activity = context.findActivity(),
+                        onUserEarnedReward = {
+                            viewModel.grantTransitionBlessingCoins(60)
+                        },
+                        onAdUnavailable = {
+                            nextAction()
+                        },
+                        onDismissed = {
+                            nextAction()
+                        }
+                    )
+                },
+                onSkipAd = {
+                    val nextAction = continuation
+                    pendingTransitionBlessingAction = null
+                    nextAction()
+                }
+            )
+        }
+
         if (gameState.isGameWon) {
             VictoryDialog(
                 score = gameState.score,
@@ -1076,9 +1133,31 @@ fun GameBoardScreen(
                 winStreak = gameState.winStreak,
                 doubleCoinsClaimed = gameState.doubleCoinsClaimed,
                 hasNextLevel = gameState.level < WorldRepository.MAX_GAME_LEVELS,
-                onWatchAdClick = { viewModel.claimDoubleCoinsReward() },
-                onNextLevelClick = { onNextLevelClick(gameState.level + 1) },
-                onWorldMapClick = onWorldMapClick
+                onWatchAdClick = {
+                    adMobManager.showRewardedAd(
+                        activity = context.findActivity(),
+                        onUserEarnedReward = {
+                            viewModel.claimDoubleCoinsReward()
+                        },
+                        onAdUnavailable = {
+                            Toast.makeText(
+                                context,
+                                "Preparando video de la Corona... intenta de nuevo en unos segundos.",
+                                Toast.LENGTH_SHORT
+                            ).show()
+                        }
+                    )
+                },
+                onNextLevelClick = {
+                    runLevelTransitionWithAds {
+                        onNextLevelClick(gameState.level + 1)
+                    }
+                },
+                onWorldMapClick = {
+                    runLevelTransitionWithAds {
+                        onWorldMapClick()
+                    }
+                }
             )
         } else if (gameState.isGameOver) {
             OutOfMovesDialog(
@@ -1086,10 +1165,32 @@ fun GameBoardScreen(
                 targetScore = gameState.targetScore,
                 coins = gameState.coins,
                 winStreak = gameState.winStreak,
-                onWatchAdClick = { viewModel.addRewardMoves(5) },
+                onWatchAdClick = {
+                    adMobManager.showRewardedAd(
+                        activity = context.findActivity(),
+                        onUserEarnedReward = {
+                            viewModel.addRewardMoves(5)
+                        },
+                        onAdUnavailable = {
+                            Toast.makeText(
+                                context,
+                                "Preparando video de rescate... intenta de nuevo en unos segundos.",
+                                Toast.LENGTH_SHORT
+                            ).show()
+                        }
+                    )
+                },
                 onContinueWithCoinsClick = { viewModel.continueWithCoins(cost = 80, extraMoves = 5) },
-                onRetryClick = { viewModel.retryLevel() },
-                onQuitClick = onWorldMapClick
+                onRetryClick = {
+                    runLevelTransitionWithAds {
+                        viewModel.retryLevel()
+                    }
+                },
+                onQuitClick = {
+                    runLevelTransitionWithAds {
+                        onWorldMapClick()
+                    }
+                }
             )
         }
 
@@ -1102,9 +1203,18 @@ fun GameBoardScreen(
                 onToggleHaptics = { viewModel.toggleHaptics(it) },
                 onToggleReducedMotion = { viewModel.toggleReducedMotion(it) },
                 onOpenTutorialClick = { viewModel.openTutorial() },
-                onRestartClick = { viewModel.retryLevel() },
+                onRestartClick = {
+                    runLevelTransitionWithAds {
+                        viewModel.retryLevel()
+                    }
+                },
                 onResumeClick = { showPauseDialog = false },
-                onQuitClick = onWorldMapClick
+                onQuitClick = {
+                    showPauseDialog = false
+                    runLevelTransitionWithAds {
+                        onWorldMapClick()
+                    }
+                }
             )
         }
     }

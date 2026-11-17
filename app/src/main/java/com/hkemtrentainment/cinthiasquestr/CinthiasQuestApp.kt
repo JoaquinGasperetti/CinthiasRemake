@@ -1,6 +1,7 @@
 package com.hkemtrentainment.cinthiasquestr
 
 import android.app.Application
+import com.hkemtrentainment.cinthiasquestr.ads.AdMobManager
 import com.hkemtrentainment.cinthiasquestr.audio.SoundManager
 import com.hkemtrentainment.cinthiasquestr.data.CloudSaveManager
 import com.hkemtrentainment.cinthiasquestr.data.PlayerRepository
@@ -19,20 +20,31 @@ class CinthiasQuestApp : Application() {
     lateinit var soundManager: SoundManager
         private set
 
+    lateinit var adMobManager: AdMobManager
+        private set
+
     private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
     override fun onCreate() {
         super.onCreate()
         playerRepository = PlayerRepository(dataStore)
         soundManager = SoundManager(this)
+        adMobManager = AdMobManager(
+            application = this,
+            soundManager = soundManager,
+            appScope = applicationScope
+        )
+        adMobManager.initialize()
+
         CloudSaveManager.startSync(playerRepository, applicationScope)
 
         applicationScope.launch {
             playerRepository.playerDataFlow
-                .map { it.soundEnabled }
+                .map { it.soundEnabled to it.hasCompletedTutorial }
                 .distinctUntilChanged()
-                .collect { enabled ->
-                    soundManager.isSoundEnabled = enabled
+                .collect { (soundEnabled, tutorialDone) ->
+                    soundManager.isSoundEnabled = soundEnabled
+                    adMobManager.hasCompletedTutorialFlag = tutorialDone
                 }
         }
     }

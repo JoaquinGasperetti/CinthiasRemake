@@ -126,6 +126,10 @@ class SoundManager(context: Context) {
 
     var isSoundEnabled: Boolean = true
 
+    @Volatile
+    var isAdMuted: Boolean = false
+        private set
+
     init {
         val audioAttributes = AudioAttributes.Builder()
             .setUsage(AudioAttributes.USAGE_GAME)
@@ -144,6 +148,28 @@ class SoundManager(context: Context) {
         }
 
         preloadShortSounds()
+    }
+
+    /**
+     * Silencia automáticamente los efectos del juego mientras un anuncio a pantalla completa
+     * (App Open, Intersticial, Bonificado o Intersticial Bonificado) está reproduciéndose.
+     */
+    fun setAdMuted(muted: Boolean) {
+        isAdMuted = muted
+        try {
+            if (muted) {
+                soundPool.autoPause()
+                activeMediaPlayers.forEach { mp ->
+                    try {
+                        if (mp.isPlaying) mp.pause()
+                    } catch (_: Exception) {
+                    }
+                }
+            } else {
+                soundPool.autoResume()
+            }
+        } catch (_: Exception) {
+        }
     }
 
     private fun preloadShortSounds() {
@@ -203,7 +229,7 @@ class SoundManager(context: Context) {
      * orgánica para evitar fatiga auditiva en acciones repetitivas (Game Feel / Juice).
      */
     fun play(sound: GameSound, volume: Float = 1.0f, rate: Float = 1.0f) {
-        if (!isSoundEnabled) return
+        if (!isSoundEnabled || isAdMuted) return
 
         val asset = when (sound) {
             GameSound.TILE_SELECT -> SoundAsset.TILE_SELECT
@@ -245,7 +271,7 @@ class SoundManager(context: Context) {
     }
 
     fun playAsset(asset: SoundAsset, volume: Float = 1.0f, rate: Float = 1.0f) {
-        if (!isSoundEnabled) return
+        if (!isSoundEnabled || isAdMuted) return
 
         if (!asset.useMediaPlayer) {
             val sampleId = soundPoolIds[asset]
@@ -288,7 +314,9 @@ class SoundManager(context: Context) {
             }
             mediaPlayer.prepareAsync()
             mediaPlayer.setOnPreparedListener { mp ->
-                mp.start()
+                if (!isAdMuted && isSoundEnabled) {
+                    mp.start()
+                }
             }
         } catch (e: Exception) {
             Log.w(TAG, "Error al reproducir ${asset.fileName}", e)

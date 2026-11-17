@@ -1,21 +1,14 @@
 package com.hkemtrentainment.cinthiasquestr.ui.mainmenu
 
-import androidx.compose.animation.AnimatedVisibility
+import android.widget.Toast
 import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.VectorConverter
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.animateIntAsState
-import androidx.compose.animation.core.animateValue
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
-import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -78,7 +71,8 @@ import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.hkemtrentainment.cinthiasquestr.CinthiasQuestApp
 import com.hkemtrentainment.cinthiasquestr.R
-import com.hkemtrentainment.cinthiasquestr.ui.gameboard.CinthiaState
+import com.hkemtrentainment.cinthiasquestr.ads.AdMobBanner
+import com.hkemtrentainment.cinthiasquestr.ads.findActivity
 import com.hkemtrentainment.cinthiasquestr.audio.GameSound
 import com.hkemtrentainment.cinthiasquestr.data.DailyQuest
 import com.hkemtrentainment.cinthiasquestr.data.PlayerData
@@ -100,6 +94,7 @@ import com.hkemtrentainment.cinthiasquestr.ui.components.StreakFlameIcon
 import com.hkemtrentainment.cinthiasquestr.ui.components.TorchEmbersOverlay
 import com.hkemtrentainment.cinthiasquestr.ui.components.TreasureChestIcon
 import com.hkemtrentainment.cinthiasquestr.ui.gameboard.BoosterType
+import com.hkemtrentainment.cinthiasquestr.ui.gameboard.CinthiaState
 import com.hkemtrentainment.cinthiasquestr.ui.tutorial.TutorialDialog
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -117,9 +112,9 @@ fun MainMenuScreen(
     val uiState by viewModel.uiState.collectAsState()
     val playerData = uiState.playerData
     val context = LocalContext.current
-    val soundManager = remember(context) {
-        (context.applicationContext as CinthiasQuestApp).soundManager
-    }
+    val app = remember(context) { context.applicationContext as CinthiasQuestApp }
+    val soundManager = app.soundManager
+    val adMobManager = app.adMobManager
     val haptic = LocalHapticFeedback.current
 
     val animatedCoins by animateIntAsState(
@@ -143,6 +138,27 @@ fun MainMenuScreen(
     val claimableQuestsCount = activeQuests.count { it.isCompleted && !it.isClaimed }
     val completedQuestsCount = activeQuests.count { it.isCompleted }
 
+    val triggerRewardedCoinsAd: (Int, String) -> Unit = { rewardCoins, originLabel ->
+        soundManager.play(GameSound.TILE_SELECT)
+        adMobManager.showRewardedAd(
+            activity = context.findActivity(),
+            onUserEarnedReward = {
+                soundManager.play(GameSound.AWARD_GOLD)
+                if (playerData.hapticsEnabled) {
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                }
+                viewModel.grantRewardedAdCoins(rewardCoins, originLabel)
+            },
+            onAdUnavailable = {
+                Toast.makeText(
+                    context,
+                    "Preparando anuncio de la Corona... intenta de nuevo en unos segundos.",
+                    Toast.LENGTH_SHORT
+                ).show()
+            }
+        )
+    }
+
     // Diálogo de la Armería Real (Tienda)
     if (uiState.isShopOpen) {
         ShopDialog(
@@ -163,6 +179,9 @@ fun MainMenuScreen(
                     haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                 }
                 viewModel.buyRoyalBundle()
+            },
+            onWatchAdForCoins = {
+                triggerRewardedCoinsAd(100, "Tesoro Real de la Armería")
             },
             onClaimBonusCoins = {
                 if (playerData.canClaimDailyReward) {
@@ -199,6 +218,9 @@ fun MainMenuScreen(
                     }
                     viewModel.claimFreeBonusCoins()
                 },
+                onWatchBonusAd = {
+                    triggerRewardedCoinsAd(80, "Cofre Extra Real")
+                },
                 onDismiss = {
                     soundManager.play(GameSound.TILE_DESELECT)
                     viewModel.closeModal()
@@ -224,6 +246,9 @@ fun MainMenuScreen(
                     }
                     viewModel.claimStarChest()
                 },
+                onWatchBonusAd = {
+                    triggerRewardedCoinsAd(80, "Suministro de la Corona")
+                },
                 onDismiss = {
                     soundManager.play(GameSound.TILE_DESELECT)
                     viewModel.closeModal()
@@ -236,6 +261,7 @@ fun MainMenuScreen(
                 bestWinStreak = playerData.bestWinStreak,
                 onPlayNow = {
                     soundManager.play(GameSound.TILE_SELECT)
+                    adMobManager.recordUserAction()
                     viewModel.closeModal()
                     onQuickPlayLevelClick(playerData.level)
                 },
@@ -297,6 +323,7 @@ fun MainMenuScreen(
                 animatedStars = animatedStars,
                 onOpenShop = {
                     soundManager.play(GameSound.TILE_SELECT)
+                    adMobManager.recordUserAction()
                     if (playerData.hapticsEnabled) {
                         haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                     }
@@ -304,6 +331,7 @@ fun MainMenuScreen(
                 },
                 onOpenQuests = {
                     soundManager.play(GameSound.TILE_SELECT)
+                    adMobManager.recordUserAction()
                     viewModel.openModal(ActiveHubModal.QUESTS_SCROLL)
                 }
             )
@@ -356,6 +384,7 @@ fun MainMenuScreen(
                         hasAlert = playerData.canClaimStarChest,
                         accentColor = Color(0xFFFFCA28),
                         onClick = {
+                            adMobManager.recordUserAction()
                             if (playerData.canClaimStarChest) {
                                 soundManager.play(GameSound.AWARD_GOLD)
                                 if (playerData.hapticsEnabled) {
@@ -382,6 +411,7 @@ fun MainMenuScreen(
                         accentColor = if (playerData.winStreak > 0) Color(0xFFFF7043) else Color(0xFF90A4AE),
                         onClick = {
                             soundManager.play(GameSound.TILE_SELECT)
+                            adMobManager.recordUserAction()
                             viewModel.openModal(ActiveHubModal.STREAK_BLESSING)
                         }
                     ) {
@@ -395,6 +425,7 @@ fun MainMenuScreen(
                         accentColor = Color(0xFF4FC3F7),
                         onClick = {
                             soundManager.play(GameSound.TILE_SELECT)
+                            adMobManager.recordUserAction()
                             viewModel.openModal(ActiveHubModal.TUTORIAL_GUIDE)
                         }
                     ) {
@@ -417,6 +448,7 @@ fun MainMenuScreen(
                         accentColor = if (playerData.canClaimDailyReward) Color(0xFF69F0AE) else Color(0xFFFFD54F),
                         onClick = {
                             soundManager.play(GameSound.TILE_SELECT)
+                            adMobManager.recordUserAction()
                             viewModel.openModal(ActiveHubModal.DAILY_CALENDAR)
                         }
                     ) {
@@ -434,6 +466,7 @@ fun MainMenuScreen(
                         accentColor = if (claimableQuestsCount > 0) Color(0xFF69F0AE) else Color(0xFF4FC3F7),
                         onClick = {
                             soundManager.play(GameSound.TILE_SELECT)
+                            adMobManager.recordUserAction()
                             viewModel.openModal(ActiveHubModal.QUESTS_SCROLL)
                         }
                     ) {
@@ -442,7 +475,7 @@ fun MainMenuScreen(
                 }
             }
 
-            // C. ZONA INFERIOR DE ACCIÓN: Barra de Cofre de Estrellas + Botón Gigante 1-Tap Play + Dock de Navegación
+            // C. ZONA INFERIOR DE ACCIÓN: Barra de Cofre de Estrellas + Botón Gigante 1-Tap Play + Dock de Navegación + Banner AdMob
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -455,6 +488,7 @@ fun MainMenuScreen(
                     playerData = playerData,
                     bannerMessage = uiState.questBannerMessage,
                     onClick = {
+                        adMobManager.recordUserAction()
                         if (playerData.canClaimStarChest) {
                             soundManager.play(GameSound.AWARD_GOLD)
                             viewModel.claimStarChest()
@@ -476,6 +510,7 @@ fun MainMenuScreen(
                     claimableQuestsCount = claimableQuestsCount + (if (playerData.canClaimStarChest) 1 else 0),
                     onQuickPlayClick = {
                         soundManager.play(GameSound.MATCH_SUCCESS_GEM)
+                        adMobManager.recordUserAction()
                         if (playerData.hapticsEnabled) {
                             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                         }
@@ -483,6 +518,7 @@ fun MainMenuScreen(
                     },
                     onWorldMapClick = {
                         soundManager.play(GameSound.TILE_SELECT)
+                        adMobManager.recordUserAction()
                         if (playerData.hapticsEnabled) {
                             haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                         }
@@ -490,6 +526,7 @@ fun MainMenuScreen(
                     },
                     onShopClick = {
                         soundManager.play(GameSound.TILE_SELECT)
+                        adMobManager.recordUserAction()
                         if (playerData.hapticsEnabled) {
                             haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                         }
@@ -497,32 +534,15 @@ fun MainMenuScreen(
                     },
                     onQuestsClick = {
                         soundManager.play(GameSound.TILE_SELECT)
+                        adMobManager.recordUserAction()
                         viewModel.openModal(ActiveHubModal.QUESTS_SCROLL)
                     }
                 )
 
-                // Espacio reservado discreto e integrado para Banner AdMob
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(38.dp)
-                        .clip(RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp))
-                        .background(Color(0xFF120D10).copy(alpha = 0.85f))
-                        .border(
-                            1.dp,
-                            MedievalPalette.BrassDark.copy(alpha = 0.45f),
-                            RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp)
-                        ),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = "PATROCINIO REAL · ADMOB BANNER",
-                        color = Color(0xFF7A685D),
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 1.2.sp
-                    )
-                }
+                // Banner Adaptativo Anclado Real de Google AdMob (ATP / Clasificación G)
+                AdMobBanner(
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
         }
     }
@@ -1150,6 +1170,7 @@ private fun DailyStreakCalendarModal(
     playerData: PlayerData,
     bannerMessage: String?,
     onClaimToday: () -> Unit,
+    onWatchBonusAd: () -> Unit,
     onDismiss: () -> Unit
 ) {
     val activeDay = playerData.dailyLoginStreak.coerceIn(1, 7)
@@ -1300,7 +1321,7 @@ private fun DailyStreakCalendarModal(
                 )
             }
 
-            Spacer(modifier = Modifier.height(14.dp))
+            Spacer(modifier = Modifier.height(10.dp))
 
             ChunkyArcadeButton(
                 onClick = onClaimToday,
@@ -1317,7 +1338,31 @@ private fun DailyStreakCalendarModal(
                         "COFRE DÍA $activeDay RECLAMADO · VUELVE MAÑANA"
                     },
                     fontWeight = FontWeight.Black,
-                    fontSize = 13.sp
+                    fontSize = 12.sp
+                )
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            ChunkyArcadeButton(
+                onClick = onWatchBonusAd,
+                style = ArcadeButtonStyle.COBALT_MAGIC,
+                cornerRadius = 14.dp,
+                lipHeight = 4.dp,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(
+                    imageVector = Icons.Default.PlayArrow,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                GoldCoinIcon(size = 16.dp)
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = "COFRE EXTRA REAL · VER VIDEO (+80 ORO)",
+                    fontWeight = FontWeight.Black,
+                    fontSize = 11.sp
                 )
             }
         }
@@ -1331,6 +1376,7 @@ private fun DailyQuestsScrollModal(
     bannerMessage: String?,
     onClaimQuest: (DailyQuest) -> Unit,
     onClaimStarChest: () -> Unit,
+    onWatchBonusAd: () -> Unit,
     onDismiss: () -> Unit
 ) {
     Dialog(onDismissRequest = onDismiss) {
@@ -1480,7 +1526,7 @@ private fun DailyQuestsScrollModal(
                 }
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(10.dp))
 
             // Sección de Cofre de Estrellas dentro del modal
             ForgedIronPanel(
@@ -1530,6 +1576,30 @@ private fun DailyQuestsScrollModal(
                         )
                     }
                 }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            ChunkyArcadeButton(
+                onClick = onWatchBonusAd,
+                style = ArcadeButtonStyle.COBALT_MAGIC,
+                cornerRadius = 12.dp,
+                lipHeight = 4.dp,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(
+                    imageVector = Icons.Default.PlayArrow,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                GoldCoinIcon(size = 16.dp)
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = "SUMINISTRO REAL · VER VIDEO (+80 ORO)",
+                    fontWeight = FontWeight.Black,
+                    fontSize = 11.sp
+                )
             }
         }
     }

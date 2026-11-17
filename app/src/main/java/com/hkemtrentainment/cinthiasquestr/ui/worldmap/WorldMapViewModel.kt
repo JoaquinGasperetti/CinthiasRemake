@@ -22,7 +22,8 @@ data class WorldMapUiState(
     val dynamiteCount: Int = 1,
     val shuffleCount: Int = 1,
     val selectedWorld: WorldConfig = WorldRepository.WORLDS.first(),
-    val activeDetailLevel: Int? = null
+    val activeDetailLevel: Int? = null,
+    val preBattleBlessingClaimedForLevel: Int? = null
 )
 
 class WorldMapViewModel(private val playerRepository: PlayerRepository) : ViewModel() {
@@ -64,6 +65,17 @@ class WorldMapViewModel(private val playerRepository: PlayerRepository) : ViewMo
 
     fun selectWorld(world: WorldConfig) {
         _uiState.update { it.copy(selectedWorld = world) }
+    }
+
+    /**
+     * Otorga el bono del Intersticial Bonificado ("Bendición Real Pre-Batalla") desde el diálogo de nivel.
+     */
+    fun grantPreBattleBlessing(levelNumber: Int, bonusCoins: Int = 60) {
+        if (bonusCoins <= 0) return
+        viewModelScope.launch {
+            playerRepository.addCoins(bonusCoins)
+            _uiState.update { it.copy(preBattleBlessingClaimedForLevel = levelNumber) }
+        }
     }
 
     class Factory(private val playerRepository: PlayerRepository) : ViewModelProvider.Factory {
