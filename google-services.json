@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "520402568184",
+    "project_id": "cinthia-s-quest-11c4a",
+    "storage_bucket": "cinthia-s-quest-11c4a.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:520402568184:android:f4ca4bf170219ace6d8c0d",
+        "android_client_info": {
+          "package_name": "com.hkemtrentainment.cinthiasquestr"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBxbCVOIhrkT64TMs9cF_DjyIQRWFZ9HVI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
