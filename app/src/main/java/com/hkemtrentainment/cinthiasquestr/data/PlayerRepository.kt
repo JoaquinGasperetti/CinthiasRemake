@@ -448,8 +448,17 @@ class PlayerRepository(private val dataStore: DataStore<Preferences>) {
             return 150 + (clampedDay - 1) * 40
         }
 
+        /**
+         * Escalona los Power-Ups de Racha (Win Streak) de forma más exigente (2, 4 y 6 victorias seguidas)
+         * para no trivializar los niveles iniciales tras una sola victoria.
+         */
         internal fun computeStreakStarterPowerUpsCount(winStreak: Int): Int {
-            return winStreak.coerceIn(0, 3)
+            return when {
+                winStreak >= 6 -> 3
+                winStreak >= 4 -> 2
+                winStreak >= 2 -> 1
+                else -> 0
+            }
         }
     }
 }

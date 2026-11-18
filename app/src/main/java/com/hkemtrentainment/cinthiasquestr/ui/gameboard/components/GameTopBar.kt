@@ -78,15 +78,15 @@ fun GameTopBar(
         label = "lowMovesPulse"
     )
 
-    val maxThreeStarScore = (targetScore * 1.8f).coerceAtLeast(1f)
+    val maxThreeStarScore = (targetScore * 1.9f).coerceAtLeast(1f)
     val starBarProgress by animateFloatAsState(
         targetValue = (score.toFloat() / maxThreeStarScore).coerceIn(0f, 1f),
         animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy),
         label = "starBarProgress"
     )
     val earnedStarsLive = when {
-        score >= (targetScore * 1.8).toInt() -> 3
-        score >= (targetScore * 1.4).toInt() -> 2
+        score >= (targetScore * 1.9).toInt() -> 3
+        score >= (targetScore * 1.45).toInt() -> 2
         score >= targetScore -> 1
         else -> 0
     }

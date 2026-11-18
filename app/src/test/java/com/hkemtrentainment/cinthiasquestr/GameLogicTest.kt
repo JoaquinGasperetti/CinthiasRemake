@@ -8,6 +8,7 @@ import com.hkemtrentainment.cinthiasquestr.data.PlayerData
 import com.hkemtrentainment.cinthiasquestr.data.PlayerRepository
 import com.hkemtrentainment.cinthiasquestr.data.WorldRepository
 import com.hkemtrentainment.cinthiasquestr.ui.gameboard.CinthiaState
+import com.hkemtrentainment.cinthiasquestr.ui.gameboard.GamePiecePowerUp
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -33,7 +34,7 @@ class GameLogicTest {
         assertEquals(level25.targetScore, level99.targetScore)
         assertEquals(level25.moves, level99.moves)
         assertEquals(level25.boardShape, level99.boardShape)
-        assertTrue(level25.moves >= 20)
+        assertTrue(level25.moves in 12..18)
     }
 
     @Test
@@ -45,15 +46,22 @@ class GameLogicTest {
     }
 
     @Test
-    fun `difficulty curve is balanced with generous moves and progressive targets`() {
+    fun `difficulty curve enforces tight moves, 6-color mastery, and progressive targets`() {
         var prevTarget = 0
         for (lvl in 1..WorldRepository.MAX_GAME_LEVELS) {
             val cfg = WorldRepository.getLevelConfig(lvl)
-            assertTrue("Level $lvl should grant at least 21 moves", cfg.moves in 21..28)
-            assertTrue("Level $lvl targetScore (${cfg.targetScore}) should progress smoothly", cfg.targetScore > prevTarget)
-            assertTrue("Level $lvl targetScore should not exceed 4800", cfg.targetScore <= 4800)
-            val pointsPerMoveRequired = cfg.targetScore.toFloat() / cfg.moves
-            assertTrue("Level $lvl points per move ($pointsPerMoveRequired) must be fair (<= 210)", pointsPerMoveRequired <= 210f)
+            assertTrue("Level $lvl moves (${cfg.moves}) must be within challenging bounds 12..17", cfg.moves in 12..17)
+            assertTrue("Level $lvl targetScore (${cfg.targetScore}) should progress strictly", cfg.targetScore > prevTarget)
+            assertTrue("Level $lvl targetScore should be between 2200 and 9500", cfg.targetScore in 2200..9500)
+            if (lvl >= 3) {
+                assertEquals("Level $lvl must use all 6 gem colors for tactical difficulty", 6, cfg.activePieceTypes.size)
+            } else {
+                assertEquals("Introductory level $lvl must use 5 gem colors", 5, cfg.activePieceTypes.size)
+            }
+            assertTrue(
+                "Level $lvl must not pre-place free Color Bombs",
+                cfg.prePlacedRelics.none { it.powerUp == GamePiecePowerUp.COLOR_BOMB }
+            )
             prevTarget = cfg.targetScore
         }
     }
@@ -103,7 +111,7 @@ class GameLogicTest {
         for (lvl in 1..WorldRepository.MAX_GAME_LEVELS) {
             val cfg = WorldRepository.getLevelConfig(lvl)
             assertTrue(cfg.levelTitle.isNotBlank())
-            assertTrue(cfg.activePieceTypes.size in 4..6)
+            assertTrue(cfg.activePieceTypes.size in 5..6)
             for (relic in cfg.prePlacedRelics) {
                 assertTrue(
                     "Pre-placed relic at (${relic.row}, ${relic.col}) in level $lvl must be on an active cell",
@@ -163,7 +171,10 @@ class GameLogicTest {
     @Test
     fun `win streak starter power-ups and daily streak rewards scale within bounds`() {
         assertEquals(0, PlayerRepository.computeStreakStarterPowerUpsCount(0))
-        assertEquals(2, PlayerRepository.computeStreakStarterPowerUpsCount(2))
+        assertEquals(0, PlayerRepository.computeStreakStarterPowerUpsCount(1))
+        assertEquals(1, PlayerRepository.computeStreakStarterPowerUpsCount(2))
+        assertEquals(2, PlayerRepository.computeStreakStarterPowerUpsCount(4))
+        assertEquals(3, PlayerRepository.computeStreakStarterPowerUpsCount(6))
         assertEquals(3, PlayerRepository.computeStreakStarterPowerUpsCount(8))
 
         val day1Reward = PlayerRepository.computeDailyStreakReward(1)

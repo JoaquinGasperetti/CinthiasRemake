@@ -331,15 +331,7 @@ object WorldRepository {
         )
     )
 
-    // Paleta de 4 colores para niveles iniciales (tutorial y aprendizaje con cascadas frecuentes)
-    private val FOUR_COLOR_PALETTE = listOf(
-        GamePieceType.RED,
-        GamePieceType.BLUE,
-        GamePieceType.GREEN,
-        GamePieceType.YELLOW
-    )
-
-    // Paleta de 5 colores para niveles intermedios o tableros con recortes pronunciados
+    // Paleta de 5 colores solo para la introducción (Niveles 1 y 2), evitando cascadas infinitas de 4 colores
     private val FIVE_COLOR_PALETTE = listOf(
         GamePieceType.RED,
         GamePieceType.BLUE,
@@ -348,7 +340,7 @@ object WorldRepository {
         GamePieceType.PURPLE
     )
 
-    // Paleta completa de 6 colores para desafíos avanzados con apoyo de reliquias
+    // Paleta completa de 6 colores desde el Nivel 3 en adelante para exigir planificación táctica real
     private val ALL_SIX_COLORS = GamePieceType.entries
 
     private data class LevelBlueprint(
@@ -361,264 +353,202 @@ object WorldRepository {
     )
 
     /**
-     * Curva de dificultad rebalanceada y justa:
-     * - Movimientos amplios (21 a 26 por nivel) para evitar bloqueos frustrantes.
-     * - Metas de puntos graduales y adaptadas al número de casillas activas de cada forma.
-     * - Progresión suave de 4 -> 5 -> 6 colores y reliquias precolocadas de ayuda.
+     * Curva de dificultad táctica y exigente:
+     * - Límites de movimientos ajustados (de 17 en el tutorial a 12 en el jefe final).
+     * - Metas de puntos exigentes (2,200 a 9,500) calibradas por percentil para cada silueta de tablero.
+     * - 6 colores activos a partir del Nivel 3 para reducir cascadas fortuitas.
+     * - Sin reliquias regaladas en niveles normales/difíciles ni bombas de color precolocadas.
      */
     private val LEVEL_BLUEPRINTS: Map<Int, LevelBlueprint> = mapOf(
-        // Mundo 1: Bosque Encantado (Niveles 1-5 · Aprendizaje y fluidez)
+        // Mundo 1: Bosque Encantado (Niveles 1-5)
         1 to LevelBlueprint(
             title = "Claro del Bosque",
             shape = BoardShape.CLASSIC_SQUARE,
-            targetScore = 600,
-            moves = 26,
-            colors = FOUR_COLOR_PALETTE,
+            targetScore = 2200,
+            moves = 17,
+            colors = FIVE_COLOR_PALETTE,
             prePlacedRelics = listOf(PrePlacedRelic(3, 3, GamePiecePowerUp.LINE_BLASTER))
         ),
         2 to LevelBlueprint(
             title = "Cruce de los Druidas",
             shape = BoardShape.ROYAL_CROSS,
-            targetScore = 750,
-            moves = 25,
-            colors = FOUR_COLOR_PALETTE,
-            prePlacedRelics = listOf(PrePlacedRelic(3, 4, GamePiecePowerUp.LINE_BLASTER))
+            targetScore = 2550,
+            moves = 16,
+            colors = FIVE_COLOR_PALETTE
         ),
         3 to LevelBlueprint(
             title = "Escudo de Roble",
             shape = BoardShape.EMERALD_SHIELD,
-            targetScore = 900,
-            moves = 25,
-            colors = FOUR_COLOR_PALETTE,
-            prePlacedRelics = listOf(PrePlacedRelic(3, 3, GamePiecePowerUp.EXPLOSIVE_BOMB))
+            targetScore = 2900,
+            moves = 15,
+            colors = ALL_SIX_COLORS
         ),
         4 to LevelBlueprint(
             title = "Mariposa Silvestre",
             shape = BoardShape.BUTTERFLY_WINGS,
-            targetScore = 1050,
-            moves = 24,
-            colors = FIVE_COLOR_PALETTE,
-            prePlacedRelics = listOf(PrePlacedRelic(3, 4, GamePiecePowerUp.LINE_BLASTER))
+            targetScore = 3150,
+            moves = 16,
+            colors = ALL_SIX_COLORS
         ),
         5 to LevelBlueprint(
             title = "Corazón del Guardián",
             shape = BoardShape.HEART_CHARM,
-            targetScore = 1250,
-            moves = 25,
-            colors = FIVE_COLOR_PALETTE,
-            prePlacedRelics = listOf(
-                PrePlacedRelic(2, 2, GamePiecePowerUp.EXPLOSIVE_BOMB),
-                PrePlacedRelic(2, 5, GamePiecePowerUp.EXPLOSIVE_BOMB)
-            )
+            targetScore = 3600,
+            moves = 15,
+            colors = ALL_SIX_COLORS,
+            prePlacedRelics = listOf(PrePlacedRelic(2, 3, GamePiecePowerUp.EXPLOSIVE_BOMB))
         ),
 
         // Mundo 2: Desierto Dorado (Niveles 6-10)
         6 to LevelBlueprint(
             title = "Peldaños de Ra",
             shape = BoardShape.STEPPED_PYRAMID,
-            targetScore = 1350,
-            moves = 24,
-            colors = FIVE_COLOR_PALETTE,
-            prePlacedRelics = listOf(PrePlacedRelic(5, 3, GamePiecePowerUp.LINE_BLASTER))
+            targetScore = 3900,
+            moves = 15,
+            colors = ALL_SIX_COLORS
         ),
         7 to LevelBlueprint(
             title = "Arenas del Tiempo",
             shape = BoardShape.HOURGLASS_TIME,
-            targetScore = 1500,
-            moves = 24,
-            colors = FIVE_COLOR_PALETTE,
-            prePlacedRelics = listOf(PrePlacedRelic(3, 3, GamePiecePowerUp.LINE_BLASTER))
+            targetScore = 4150,
+            moves = 15,
+            colors = ALL_SIX_COLORS
         ),
         8 to LevelBlueprint(
             title = "Oasis Octogonal",
             shape = BoardShape.OCTAGON_CITADEL,
-            targetScore = 1650,
-            moves = 23,
-            colors = FIVE_COLOR_PALETTE
+            targetScore = 4450,
+            moves = 15,
+            colors = ALL_SIX_COLORS
         ),
         9 to LevelBlueprint(
             title = "Cáliz del Faraón",
             shape = BoardShape.CHALICE_GRAIL,
-            targetScore = 1800,
-            moves = 24,
-            colors = FIVE_COLOR_PALETTE,
-            prePlacedRelics = listOf(
-                PrePlacedRelic(1, 3, GamePiecePowerUp.EXPLOSIVE_BOMB),
-                PrePlacedRelic(1, 4, GamePiecePowerUp.LINE_BLASTER)
-            )
+            targetScore = 4750,
+            moves = 14,
+            colors = ALL_SIX_COLORS
         ),
         10 to LevelBlueprint(
             title = "Joya de las Dunas",
             shape = BoardShape.DIAMOND_GEM,
-            targetScore = 2000,
-            moves = 24,
-            colors = FIVE_COLOR_PALETTE,
-            prePlacedRelics = listOf(
-                PrePlacedRelic(3, 3, GamePiecePowerUp.LINE_BLASTER),
-                PrePlacedRelic(4, 4, GamePiecePowerUp.EXPLOSIVE_BOMB)
-            )
+            targetScore = 5100,
+            moves = 14,
+            colors = ALL_SIX_COLORS,
+            prePlacedRelics = listOf(PrePlacedRelic(3, 3, GamePiecePowerUp.LINE_BLASTER))
         ),
 
         // Mundo 3: Cueva de Cristal (Niveles 11-15)
         11 to LevelBlueprint(
             title = "Portal Subterráneo",
             shape = BoardShape.ARCHWAY_PORTAL,
-            targetScore = 2150,
-            moves = 23,
-            colors = FIVE_COLOR_PALETTE,
-            prePlacedRelics = listOf(PrePlacedRelic(2, 3, GamePiecePowerUp.LINE_BLASTER))
+            targetScore = 5350,
+            moves = 15,
+            colors = ALL_SIX_COLORS
         ),
         12 to LevelBlueprint(
             title = "Estrella Polar",
             shape = BoardShape.STAR_COMPASS,
-            targetScore = 2300,
-            moves = 24,
-            colors = FIVE_COLOR_PALETTE,
-            prePlacedRelics = listOf(PrePlacedRelic(3, 4, GamePiecePowerUp.EXPLOSIVE_BOMB))
+            targetScore = 5650,
+            moves = 14,
+            colors = ALL_SIX_COLORS
         ),
         13 to LevelBlueprint(
             title = "Puentes de Escarcha",
             shape = BoardShape.TWIN_BRIDGES,
-            targetScore = 2450,
-            moves = 23,
-            colors = ALL_SIX_COLORS,
-            prePlacedRelics = listOf(
-                PrePlacedRelic(1, 2, GamePiecePowerUp.EXPLOSIVE_BOMB),
-                PrePlacedRelic(1, 5, GamePiecePowerUp.LINE_BLASTER)
-            )
+            targetScore = 5900,
+            moves = 14,
+            colors = ALL_SIX_COLORS
         ),
         14 to LevelBlueprint(
             title = "Anillo de Escarcha",
             shape = BoardShape.DONUT_RING,
-            targetScore = 2600,
-            moves = 23,
-            colors = FIVE_COLOR_PALETTE,
-            prePlacedRelics = listOf(PrePlacedRelic(2, 3, GamePiecePowerUp.LINE_BLASTER))
+            targetScore = 6200,
+            moves = 14,
+            colors = ALL_SIX_COLORS
         ),
         15 to LevelBlueprint(
             title = "Bastión del Glaciar",
             shape = BoardShape.CASTLE_FORTRESS,
-            targetScore = 2850,
-            moves = 24,
+            targetScore = 6600,
+            moves = 13,
             colors = ALL_SIX_COLORS,
-            prePlacedRelics = listOf(
-                PrePlacedRelic(2, 2, GamePiecePowerUp.LINE_BLASTER),
-                PrePlacedRelic(2, 5, GamePiecePowerUp.EXPLOSIVE_BOMB),
-                PrePlacedRelic(4, 3, GamePiecePowerUp.LINE_BLASTER)
-            )
+            prePlacedRelics = listOf(PrePlacedRelic(2, 3, GamePiecePowerUp.EXPLOSIVE_BOMB))
         ),
 
         // Mundo 4: Reino de Caramelos (Niveles 16-20)
         16 to LevelBlueprint(
             title = "Corazón de Frambuesa",
             shape = BoardShape.HEART_CHARM,
-            targetScore = 3000,
-            moves = 23,
-            colors = FIVE_COLOR_PALETTE,
-            prePlacedRelics = listOf(PrePlacedRelic(3, 3, GamePiecePowerUp.EXPLOSIVE_BOMB))
+            targetScore = 6850,
+            moves = 14,
+            colors = ALL_SIX_COLORS
         ),
         17 to LevelBlueprint(
             title = "Cruz de Caramelo",
             shape = BoardShape.ROYAL_CROSS,
-            targetScore = 3150,
-            moves = 23,
-            colors = FIVE_COLOR_PALETTE,
-            prePlacedRelics = listOf(
-                PrePlacedRelic(3, 3, GamePiecePowerUp.LINE_BLASTER),
-                PrePlacedRelic(4, 4, GamePiecePowerUp.EXPLOSIVE_BOMB)
-            )
+            targetScore = 7100,
+            moves = 14,
+            colors = ALL_SIX_COLORS
         ),
         18 to LevelBlueprint(
             title = "Alas de Azúcar",
             shape = BoardShape.BUTTERFLY_WINGS,
-            targetScore = 3350,
-            moves = 22,
-            colors = ALL_SIX_COLORS,
-            prePlacedRelics = listOf(
-                PrePlacedRelic(3, 1, GamePiecePowerUp.LINE_BLASTER),
-                PrePlacedRelic(3, 6, GamePiecePowerUp.LINE_BLASTER)
-            )
+            targetScore = 7400,
+            moves = 13,
+            colors = ALL_SIX_COLORS
         ),
         19 to LevelBlueprint(
             title = "Copa de Néctar",
             shape = BoardShape.CHALICE_GRAIL,
-            targetScore = 3500,
-            moves = 23,
-            colors = FIVE_COLOR_PALETTE,
-            prePlacedRelics = listOf(
-                PrePlacedRelic(0, 3, GamePiecePowerUp.LINE_BLASTER),
-                PrePlacedRelic(1, 4, GamePiecePowerUp.EXPLOSIVE_BOMB)
-            )
+            targetScore = 7650,
+            moves = 13,
+            colors = ALL_SIX_COLORS
         ),
         20 to LevelBlueprint(
             title = "Corona de Mazapán",
             shape = BoardShape.CROWN_OF_FIRE,
-            targetScore = 3750,
-            moves = 23,
+            targetScore = 8000,
+            moves = 13,
             colors = ALL_SIX_COLORS,
-            prePlacedRelics = listOf(
-                PrePlacedRelic(2, 3, GamePiecePowerUp.COLOR_BOMB),
-                PrePlacedRelic(3, 2, GamePiecePowerUp.EXPLOSIVE_BOMB),
-                PrePlacedRelic(3, 5, GamePiecePowerUp.EXPLOSIVE_BOMB)
-            )
+            prePlacedRelics = listOf(PrePlacedRelic(3, 3, GamePiecePowerUp.LINE_BLASTER))
         ),
 
         // Mundo 5: Picos Volcánicos (Niveles 21-25)
         21 to LevelBlueprint(
             title = "Puentes de Magma",
             shape = BoardShape.TWIN_BRIDGES,
-            targetScore = 3900,
-            moves = 22,
-            colors = ALL_SIX_COLORS,
-            prePlacedRelics = listOf(
-                PrePlacedRelic(1, 2, GamePiecePowerUp.LINE_BLASTER),
-                PrePlacedRelic(1, 5, GamePiecePowerUp.LINE_BLASTER)
-            )
+            targetScore = 8250,
+            moves = 13,
+            colors = ALL_SIX_COLORS
         ),
         22 to LevelBlueprint(
             title = "Cráter del Dragón",
             shape = BoardShape.DONUT_RING,
-            targetScore = 4050,
-            moves = 22,
-            colors = FIVE_COLOR_PALETTE,
-            prePlacedRelics = listOf(
-                PrePlacedRelic(1, 3, GamePiecePowerUp.EXPLOSIVE_BOMB),
-                PrePlacedRelic(1, 4, GamePiecePowerUp.LINE_BLASTER)
-            )
+            targetScore = 8500,
+            moves = 13,
+            colors = ALL_SIX_COLORS
         ),
         23 to LevelBlueprint(
             title = "Reloj de Obsidiana",
             shape = BoardShape.HOURGLASS_TIME,
-            targetScore = 4200,
-            moves = 22,
-            colors = FIVE_COLOR_PALETTE,
-            prePlacedRelics = listOf(
-                PrePlacedRelic(1, 3, GamePiecePowerUp.LINE_BLASTER),
-                PrePlacedRelic(6, 4, GamePiecePowerUp.EXPLOSIVE_BOMB)
-            )
+            targetScore = 8750,
+            moves = 13,
+            colors = ALL_SIX_COLORS
         ),
         24 to LevelBlueprint(
             title = "Diamante Ígneo",
             shape = BoardShape.DIAMOND_GEM,
-            targetScore = 4350,
-            moves = 22,
-            colors = FIVE_COLOR_PALETTE,
-            prePlacedRelics = listOf(
-                PrePlacedRelic(3, 3, GamePiecePowerUp.COLOR_BOMB),
-                PrePlacedRelic(4, 4, GamePiecePowerUp.EXPLOSIVE_BOMB)
-            )
+            targetScore = 9050,
+            moves = 12,
+            colors = ALL_SIX_COLORS
         ),
         25 to LevelBlueprint(
             title = "Trono de la Corona Suprema",
             shape = BoardShape.CROWN_OF_FIRE,
-            targetScore = 4600,
-            moves = 23,
+            targetScore = 9500,
+            moves = 12,
             colors = ALL_SIX_COLORS,
-            prePlacedRelics = listOf(
-                PrePlacedRelic(2, 3, GamePiecePowerUp.COLOR_BOMB),
-                PrePlacedRelic(4, 2, GamePiecePowerUp.LINE_BLASTER),
-                PrePlacedRelic(4, 5, GamePiecePowerUp.LINE_BLASTER)
-            )
+            prePlacedRelics = listOf(PrePlacedRelic(3, 3, GamePiecePowerUp.EXPLOSIVE_BOMB))
         )
     )
 
@@ -634,9 +564,9 @@ object WorldRepository {
         val blueprint = LEVEL_BLUEPRINTS[safeLevel] ?: LevelBlueprint(
             title = "Batalla Real $safeLevel",
             shape = BoardShape.entries[safeLevel % BoardShape.entries.size],
-            targetScore = 600 + safeLevel * 160,
-            moves = 23,
-            colors = FIVE_COLOR_PALETTE
+            targetScore = 2000 + safeLevel * 300,
+            moves = 14,
+            colors = ALL_SIX_COLORS
         )
         return LevelConfig(
             levelNumber = safeLevel,

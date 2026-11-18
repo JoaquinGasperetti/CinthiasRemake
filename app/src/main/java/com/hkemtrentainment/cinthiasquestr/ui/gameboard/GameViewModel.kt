@@ -93,14 +93,14 @@ data class GameUIState(
 
     val progressToThreeStars: Float
         get() {
-            val maxStarScore = (targetScore * 1.8f).coerceAtLeast(1f)
+            val maxStarScore = (targetScore * 1.9f).coerceAtLeast(1f)
             return (score.toFloat() / maxStarScore).coerceIn(0f, 1f)
         }
 
     val currentLiveStars: Int
         get() = when {
-            score >= (targetScore * 1.8).toInt() -> 3
-            score >= (targetScore * 1.4).toInt() -> 2
+            score >= (targetScore * 1.9).toInt() -> 3
+            score >= (targetScore * 1.45).toInt() -> 2
             score >= targetScore -> 1
             else -> 0
         }
@@ -318,7 +318,7 @@ class GameViewModel(
         val powerUpProgression = listOf(
             GamePiecePowerUp.LINE_BLASTER,
             GamePiecePowerUp.EXPLOSIVE_BOMB,
-            GamePiecePowerUp.COLOR_BOMB
+            GamePiecePowerUp.LINE_BLASTER
         )
 
         val spawnedCoords = mutableMapOf<Pair<Int, Int>, Long>()
@@ -373,7 +373,7 @@ class GameViewModel(
             delay(IDLE_HINT_DELAY_MS)
             val state = _uiState.value
             if (state.boardState == BoardState.IDLE && !state.isGameOver && !state.isGameWon) {
-                val hintPair = findBestHintMove()
+                val hintPair = findIdleHintMove()
                 if (hintPair != null) {
                     _uiState.update {
                         it.copy(
@@ -841,11 +841,15 @@ class GameViewModel(
                 )
             )
 
-            // 7. Calcular puntos (20 pts base por gema + bonos por crear o detonar Power-Ups)
-            val baseGemPoints = finalDestructionSet.size * 20 * combo
-            val powerUpBonus = (if (powerUpTriggered) 80 * maxOf(1, triggeredPowerUps.size) else 0) +
-                (powerUpsToSpawn.size * 60)
-            val points = baseGemPoints + powerUpBonus
+            // 7. Calcular puntos con multiplicador de cascada amortiguado y escalado por nivel/geometría
+            val comboMultiplier = (1.0f + (combo - 1) * 0.22f).coerceAtMost(1.88f)
+            val levelProgressionScale = 1.0f + (safeLevel - 1) * 0.21f
+            val geometryScale = (64f / levelConfig.boardShape.activeCellCount.coerceAtLeast(40)).coerceIn(1.0f, 1.32f)
+            val totalScale = levelProgressionScale * geometryScale
+            val rawGemPoints = finalDestructionSet.size * 14f * comboMultiplier
+            val rawPowerUpBonus = (if (powerUpTriggered) 40f * maxOf(1, triggeredPowerUps.size) else 0f) +
+                (powerUpsToSpawn.size * 30f)
+            val points = ((rawGemPoints + rawPowerUpBonus) * totalScale).toInt().coerceAtLeast(15)
 
             val avgRow = if (finalDestructionSet.isNotEmpty()) {
                 finalDestructionSet.map { it.first }.average().toFloat()
@@ -1056,6 +1060,34 @@ class GameViewModel(
      * Aplica gravedad vertical sobre las casillas activas de cada columna, permitiendo que las gemas
      * atraviesen fosos o puentes intermedios y preservando intactos los huecos de la forma del nivel.
      */
+    /**
+     * Filtra la generación de gemas nuevas en caída libre (Skyfall Anti-Cascade Dampening)
+     * para evitar que caídas fortuitas regalen combinaciones automáticas masivas sin intervención del jugador.
+     */
+    private fun pickRefillType(targetRow: Int, col: Int, below1: GamePieceType?, below2: GamePieceType?): GamePieceType {
+        val pool = levelConfig.activePieceTypes.ifEmpty { GamePieceType.entries }
+        val initialPick = pool.random()
+        val antiCascadeProb = (0.72f + safeLevel * 0.003f).coerceAtMost(0.82f)
+        if (kotlin.random.Random.nextFloat() >= antiCascadeProb) {
+            return initialPick
+        }
+
+        val forbiddenTypes = mutableSetOf<GamePieceType>()
+        if (below1 != null && below1 == below2) {
+            forbiddenTypes.add(below1)
+        }
+        if (col >= 2 && isCellPlayable(targetRow, col - 1) && isCellPlayable(targetRow, col - 2)) {
+            val left1 = logicalGrid[targetRow][col - 1]
+            val left2 = logicalGrid[targetRow][col - 2]
+            if (!left1.isEmpty && !left2.isEmpty && left1.type == left2.type) {
+                forbiddenTypes.add(left1.type)
+            }
+        }
+        if (initialPick !in forbiddenTypes) return initialPick
+        val filtered = pool.filter { it !in forbiddenTypes }
+        return if (filtered.isNotEmpty()) filtered.random() else initialPick
+    }
+
     private fun applyGravity() {
         for (c in 0 until 8) {
             val playableRowsDesc = (7 downTo 0).filter { r -> isCellPlayable(r, c) }
@@ -1066,12 +1098,17 @@ class GameViewModel(
                     survivingPieces.add(piece)
                 }
             }
-            while (survivingPieces.size < playableRowsDesc.size) {
-                survivingPieces.add(GamePiece(type = randomType()))
-            }
             for (idx in playableRowsDesc.indices) {
                 val targetRow = playableRowsDesc[idx]
-                logicalGrid[targetRow][c] = survivingPieces[idx]
+                if (idx < survivingPieces.size) {
+                    logicalGrid[targetRow][c] = survivingPieces[idx]
+                } else {
+                    val below1 = if (idx >= 1) logicalGrid[playableRowsDesc[idx - 1]][c].type else null
+                    val below2 = if (idx >= 2) logicalGrid[playableRowsDesc[idx - 2]][c].type else null
+                    val spawnedPiece = GamePiece(type = pickRefillType(targetRow, c, below1, below2))
+                    survivingPieces.add(spawnedPiece)
+                    logicalGrid[targetRow][c] = spawnedPiece
+                }
             }
             for (r in 0 until 8) {
                 if (!isCellPlayable(r, c)) {
@@ -1176,6 +1213,38 @@ class GameViewModel(
 
     private fun hasPossibleMoves(): Boolean {
         return findBestHintMove() != null
+    }
+
+    /**
+     * En niveles avanzados (Nivel >= 3), la pista por inactividad sugiere una jugada básica de 3 gemas
+     * en lugar de regalar siempre la combinación óptima de 4/5 gemas o Power-Ups.
+     */
+    private fun findIdleHintMove(): Pair<Pair<Int, Int>, Pair<Int, Int>>? {
+        if (safeLevel <= 2) return findBestHintMove()
+        var fallbackMove: Pair<Pair<Int, Int>, Pair<Int, Int>>? = null
+        var bestBasicMove: Pair<Pair<Int, Int>, Pair<Int, Int>>? = null
+        for (r in 0 until 8) {
+            for (c in 0 until 8) {
+                if (!isCellPlayable(r, c)) continue
+                val neighbors = listOfNotNull(
+                    if (c + 1 < 8 && isCellPlayable(r, c + 1)) r to (c + 1) else null,
+                    if (r + 1 < 8 && isCellPlayable(r + 1, c)) (r + 1) to c else null
+                )
+                for ((nr, nc) in neighbors) {
+                    val weight = evaluateSwapWeight(r, c, nr, nc)
+                    if (weight > 0) {
+                        if (fallbackMove == null) fallbackMove = (r to c) to (nr to nc)
+                        if (weight == 3) {
+                            bestBasicMove = (r to c) to (nr to nc)
+                            break
+                        }
+                    }
+                }
+                if (bestBasicMove != null) break
+            }
+            if (bestBasicMove != null) break
+        }
+        return bestBasicMove ?: fallbackMove
     }
 
     /**
@@ -1297,7 +1366,7 @@ class GameViewModel(
                     )
                 }
                 for (step in 1..movesToConvert) {
-                    val stepPoints = 60
+                    val stepPoints = (30 * (1.0f + (safeLevel - 1) * 0.12f)).toInt()
                     bonusScore += stepPoints
                     val pitch = (1.0f + step * 0.06f).coerceIn(1.0f, 1.85f)
                     _effects.emit(GameEffect.PlaySound(GameSound.MATCH_SUCCESS_GEM, rate = pitch, volume = 0.75f))
@@ -1333,8 +1402,8 @@ class GameViewModel(
             val target = finalState.targetScore
             val score = finalState.score
             val stars = when {
-                score >= (target * 1.8).toInt() -> 3
-                score >= (target * 1.4).toInt() -> 2
+                score >= (target * 1.9).toInt() -> 3
+                score >= (target * 1.45).toInt() -> 2
                 else -> 1
             }
             val streakBonusCoins = minOf(75, (finalState.winStreak + 1) * 15)
@@ -1846,7 +1915,7 @@ class GameViewModel(
     }
 
     companion object {
-        private const val IDLE_HINT_DELAY_MS = 4500L
+        private const val IDLE_HINT_DELAY_MS = 8000L
     }
 
     class Factory(

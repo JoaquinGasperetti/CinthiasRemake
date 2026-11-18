@@ -294,7 +294,7 @@ fun LevelDetailDialog(
                                 text = if (streakStarterCount > 0) {
                                     "RACHA x$winStreak ACTIVA: +$streakStarterCount RELIQUIA${if (streakStarterCount > 1) "S" else ""} AL INICIAR"
                                 } else {
-                                    "GANA PARA ACTIVAR LA RACHA DE CINTHIA"
+                                    "GANA 2 SEGUIDAS PARA ACTIVAR LA RACHA DE CINTHIA"
                                 },
                                 color = MedievalPalette.ParchmentTextDark,
                                 fontSize = 11.sp,
@@ -308,12 +308,12 @@ fun LevelDetailDialog(
                             horizontalArrangement = Arrangement.SpaceEvenly
                         ) {
                             val bonusLabels = listOf(
-                                1 to "Rayo (x1)",
-                                2 to "Bomba (x2)",
-                                3 to "Arcoíris (x3)"
+                                1 to "Rayo (x2)",
+                                2 to "Bomba (x4)",
+                                3 to "Doble Rayo (x6)"
                             )
-                            bonusLabels.forEach { (reqStreak, label) ->
-                                val active = streakStarterCount >= reqStreak
+                            bonusLabels.forEach { (reqRelics, label) ->
+                                val active = streakStarterCount >= reqRelics
                                 Surface(
                                     color = if (active) Color(0xFF2E7D32) else Color(0xFFE0D0B8),
                                     shape = RoundedCornerShape(8.dp),
