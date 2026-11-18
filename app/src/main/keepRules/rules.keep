@@ -4,5 +4,28 @@
 # For more details, see
 #   https://d.android.com/r/tools/r8/keep-rules
 
+-keepattributes *Annotation*,InnerClasses,EnclosingMethod,Signature,SourceFile,LineNumberTable
+-renamesourcefileattribute SourceFile
+
+# Google Mobile Ads (AdMob)
 -keep class com.google.android.gms.ads.** { *; }
 -dontwarn com.google.android.gms.ads.**
+
+# Firebase Auth & Firestore
+-keep class com.google.firebase.** { *; }
+-dontwarn com.google.firebase.**
+-dontwarn kotlin.**
+
+# Kotlinx Serialization & Navigation 3
+-keepattributes RuntimeVisibleAnnotations,RuntimeVisibleParameterAnnotations
+-keep,includedescriptorclasses class com.hkemtrentainment.cinthiasquestr.**$$serializer { *; }
+-keepclassmembers class com.hkemtrentainment.cinthiasquestr.** {
+    *** Companion;
+}
+-keepclasseswithmembers class com.hkemtrentainment.cinthiasquestr.** {
+    kotlinx.serialization.KSerializer serializer(...);
+}
+
+# Mantener modelos de datos y rutas de navegación
+-keep class com.hkemtrentainment.cinthiasquestr.data.** { *; }
+-keep class com.hkemtrentainment.cinthiasquestr.navigation.** { *; }
